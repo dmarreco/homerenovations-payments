@@ -42,7 +42,8 @@ Deploy creates: API Gateway, Lambdas, DynamoDB (Ledger, Payments, Payment Method
 5. **Stripe webhook**: In Stripe Dashboard add webhook endpoint `https://<api>/dev/webhooks/stripe` for `payment_intent.succeeded` and `payment_intent.payment_failed`; store the signing secret in SSM at `/sfr3/<stage>/STRIPE_WEBHOOK_SECRET` (used by stripeService).
 6. **Balance**: GET `/residents/{residentId}/balance` – should reflect payment after webhook.
 7. **History**: GET `/residents/{residentId}/payments`.
-8. **Events**: Check S3 bucket (events lake) for Firehose data; query with Athena using Glue table `sfr3_events_dev.events`.
+8. **Refund a payment**: POST `/residents/{residentId}/payments/{paymentId}/refund` (no body for full refund; optional `{ "amount": <cents> }` for partial refund). Payment must be SETTLED.
+9. **Events**: Check S3 bucket (events lake) for Firehose data; query with Athena using Glue table `sfr3_events_dev.events`.
 
 ## Tests
 

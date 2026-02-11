@@ -10,6 +10,7 @@ import type {
   MethodResult,
   PaymentIntentParams,
   PaymentIntentResult,
+  RefundResult,
   DateRangeParams,
   BalanceTransaction,
   Evidence,
@@ -68,6 +69,17 @@ export class StripeAdapter implements PaymentProviderPort {
     } catch {
       return null;
     }
+  }
+
+  async createRefund(paymentIntentId: string, amount?: number): Promise<RefundResult> {
+    const params: { payment_intent: string; amount?: number } = { payment_intent: paymentIntentId };
+    if (amount != null && amount > 0) params.amount = amount;
+    const refund = await this.stripe.refunds.create(params);
+    return {
+      refundId: refund.id,
+      status: refund.status ?? 'succeeded',
+      amount: refund.amount ?? 0,
+    };
   }
 
   async getBalanceTransactions(params: DateRangeParams): Promise<BalanceTransaction[]> {

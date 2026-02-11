@@ -58,6 +58,30 @@ export function createPaymentAppliedEvent(
   };
 }
 
+export function createRefundAppliedEvent(
+  residentId: string,
+  version: number,
+  params: {
+    amount: number;
+    referenceId: string;
+    propertyId?: string;
+    state?: string;
+  }
+): LedgerEventRecord {
+  const now = new Date().toISOString();
+  return {
+    PK: ledgerPk(residentId),
+    SK: ledgerSk(version),
+    type: 'EVENT',
+    eventType: 'REFUND_APPLIED',
+    amount: Math.abs(params.amount),
+    referenceId: params.referenceId,
+    propertyId: params.propertyId,
+    state: params.state,
+    timestamp: now,
+  };
+}
+
 export function createLateFeeAppliedEvent(
   residentId: string,
   version: number,

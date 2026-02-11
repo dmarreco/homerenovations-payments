@@ -9,6 +9,7 @@ import type {
   MethodResult,
   PaymentIntentParams,
   PaymentIntentResult,
+  RefundResult,
   DateRangeParams,
   BalanceTransaction,
   Evidence,
@@ -67,6 +68,10 @@ export class StripeServiceClient implements PaymentProviderPort {
     return this.request<{ status: string; amount: number } | null>('getPaymentIntent', {
       paymentIntentId,
     });
+  }
+
+  async createRefund(paymentIntentId: string, amount?: number): Promise<RefundResult> {
+    return this.request<RefundResult>('createRefund', { paymentIntentId, amount });
   }
 
   async getBalanceTransactions(params: DateRangeParams): Promise<BalanceTransaction[]> {

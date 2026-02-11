@@ -89,6 +89,20 @@ export async function settlePayment(paymentId: string, config: PaymentRepository
   );
 }
 
+export async function refundPayment(paymentId: string, config: PaymentRepositoryConfig): Promise<void> {
+  const client = getClient(config);
+  await client.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: paymentPk(paymentId), SK: 'METADATA' },
+      UpdateExpression: 'SET #status = :status',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: { ':status': 'REFUNDED', ':settled': 'SETTLED' },
+      ConditionExpression: 'attribute_exists(PK) AND #status = :settled',
+    })
+  );
+}
+
 export async function failPayment(
   paymentId: string,
   reason: string,

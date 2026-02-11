@@ -377,6 +377,7 @@ The snapshot write is a separate DynamoDB put that is idempotent (same version, 
 | `sendNotification` | EventBridge | Send transactional emails via SES |
 | `generateReceipt` | EventBridge | Generate PDF receipt, store in S3 |
 | `handleDispute` | API Gateway + EventBridge | Manage dispute lifecycle, submit evidence to Stripe |
+| `refundPayment` | API Gateway | Refund a settled payment via Stripe, update status to REFUNDED, append REFUND_APPLIED to ledger |
 
 ### 6.2 Stream Processor -- The Event Backbone
 
@@ -534,6 +535,22 @@ EventBridge Scheduler (daily 2am) -> dailyReconciliation Lambda
   5. Publish reconciliation.complete event to EventBridge
   6. If mismatches found -> CloudWatch Alarm -> alert finance team
 ```
+
+### 7.8 Refund Flow
+
+A settled payment can be refunded (full or partial) via the API. The ledger records a `REFUND_APPLIED` event with a positive amount, which increases the resident's balance (reinstates the charge).
+
+```
+Client -> API GW -> refundPayment Lambda
+  1. Look up payment by paymentId from Payments table
+  2. Validate: payment exists, residentId matches path, status is SETTLED
+  3. Call stripeService createRefund(paymentIntentId, amount?) — omit amount for full refund
+  4. Update Payments table: status = REFUNDED (condition: status = SETTLED)
+  5. Append REFUND_APPLIED event to Ledger (positive amount)
+  6. Return 200 with { paymentId, refundId, status, amount }
+```
+
+Route: `POST /residents/{residentId}/payments/{paymentId}/refund`. Optional body: `{ "amount": <cents> }` for partial refund.
 
 ---
 
@@ -822,6 +839,7 @@ sfr3-payments/
       sendNotification.ts
       generateReceipt.ts
       handleDispute.ts
+      refundPayment.ts
 
     domain/                       # Core business logic
       ledger/

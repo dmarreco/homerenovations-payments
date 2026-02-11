@@ -51,11 +51,18 @@ export interface Evidence {
   [key: string]: string | undefined;
 }
 
+export interface RefundResult {
+  refundId: string;
+  status: string;
+  amount: number;
+}
+
 export interface PaymentProviderPort {
   createCustomer(params: CreateCustomerParams): Promise<CustomerResult>;
   attachPaymentMethod(customerId: string, paymentMethodId: string): Promise<MethodResult>;
   detachPaymentMethod(paymentMethodId: string): Promise<void>;
   createPaymentIntent(params: PaymentIntentParams): Promise<PaymentIntentResult>;
+  createRefund(paymentIntentId: string, amount?: number): Promise<RefundResult>;
   getBalanceTransactions(params: DateRangeParams): Promise<BalanceTransaction[]>;
   getPaymentIntent(paymentIntentId: string): Promise<{ status: string; amount: number } | null>;
   submitDisputeEvidence(disputeId: string, evidence: Evidence): Promise<void>;

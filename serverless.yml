@@ -201,6 +201,13 @@ functions:
           path: residents/{residentId}/payments/{paymentId}/receipt
           method: get
           cors: true
+  refundPayment:
+    handler: src/functions/refundPayment.handler
+    events:
+      - http:
+          path: residents/{residentId}/payments/{paymentId}/refund
+          method: post
+          cors: true
   generateReceipt:
     handler: src/functions/generateReceipt.handler
     events:

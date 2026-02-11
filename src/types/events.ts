@@ -9,6 +9,7 @@ export type DomainEventType =
   | 'payment.initiated'
   | 'payment.settled'
   | 'payment.failed'
+  | 'payment.refunded'
   | 'payment.permanently_failed'
   | 'late_fee.applied'
   | 'receipt.generated'
@@ -45,7 +46,7 @@ export function ledgerEventTypeToDomainEventType(
     CHARGE_POSTED: 'charge.posted',
     PAYMENT_APPLIED: 'payment.settled',
     LATE_FEE_APPLIED: 'late_fee.applied',
-    REFUND_APPLIED: 'payment.failed', // treat as reversal
+    REFUND_APPLIED: 'payment.refunded',
     CHARGEBACK_APPLIED: 'charge.posted', // charge reinstated
     CREDIT_APPLIED: 'payment.settled', // credit reduces balance
   };

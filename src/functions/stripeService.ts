@@ -9,6 +9,7 @@ import type {
   CreateCustomerParams,
   PaymentIntentParams,
   PaymentIntentResult,
+  RefundResult,
   DateRangeParams,
   Evidence,
 } from '../ports/paymentProvider';
@@ -80,6 +81,13 @@ async function handleAction(action: string, params: Record<string, unknown> | nu
         const stripe = getAdapter();
         const data = await stripe.getPaymentIntent(paymentIntentId);
         return { success: true, data: data ?? null };
+      }
+      case 'createRefund': {
+        const { paymentIntentId, amount } = params as { paymentIntentId: string; amount?: number };
+        if (!paymentIntentId) return { success: false, error: 'createRefund requires paymentIntentId' };
+        const stripe = getAdapter();
+        const data = await stripe.createRefund(paymentIntentId, amount);
+        return { success: true, data: data as RefundResult };
       }
       case 'getBalanceTransactions': {
         const stripe = getAdapter();
