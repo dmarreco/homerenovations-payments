@@ -11,7 +11,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing residentId or methodId' }) };
   }
   const config = getConfig();
-  if (!config.stripeServiceFunctionName) {
+  if (!config.stripeServiceUrl) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
   const record = await getItem<{ stripePaymentMethodId: string }>(
@@ -22,7 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 404, body: JSON.stringify({ error: 'Payment method not found' }) };
   }
   try {
-    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+    const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
     await stripe.detachPaymentMethod(record.stripePaymentMethodId);
     await deleteItem(config.paymentMethodsTableName, {
       PK: paymentMethodPk(residentId),

@@ -1,22 +1,20 @@
 /**
  * Dedicated Stripe service Lambda. Only this function talks to the Stripe API.
- * Invoked by other Lambdas with { action, params }; dispatches to StripeAdapter.
+ * Exposed via HTTP POST (API Gateway); body is { action, params }. Returns JSON { success, data } or { success, error }.
  */
 
-import type { Handler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createStripeAdapter } from '../adapters/stripeAdapter';
 import type {
   CreateCustomerParams,
-  CustomerResult,
-  MethodResult,
   PaymentIntentParams,
   PaymentIntentResult,
   DateRangeParams,
-  BalanceTransaction,
   Evidence,
 } from '../ports/paymentProvider';
 
 const secretKey = process.env.STRIPE_SECRET_KEY ?? '';
+const apiKey = process.env.STRIPE_SERVICE_API_KEY ?? '';
 
 function getAdapter() {
   if (!secretKey) throw new Error('STRIPE_SECRET_KEY not set');
@@ -40,9 +38,12 @@ export interface StripeServiceErrorResponse {
 
 export type StripeServiceResponse = StripeServiceSuccessResponse | StripeServiceErrorResponse;
 
-export const handler: Handler<StripeServiceInvokePayload, StripeServiceResponse> = async (event) => {
-  const { action, params } = event;
-  if (!action || typeof params !== 'object' || params === null) {
+function isApiGatewayEvent(event: unknown): event is APIGatewayProxyEvent {
+  return typeof event === 'object' && event !== null && 'body' in event && 'requestContext' in event;
+}
+
+async function handleAction(action: string, params: Record<string, unknown> | null | undefined): Promise<StripeServiceResponse> {
+  if (!action || params === null || params === undefined || typeof params !== 'object') {
     return { success: false, error: 'Missing action or params' };
   }
   try {
@@ -111,4 +112,43 @@ export const handler: Handler<StripeServiceInvokePayload, StripeServiceResponse>
     console.error('stripeService', action, err);
     return { success: false, error: message };
   }
+}
+
+export const handler = async (event: APIGatewayProxyEvent | StripeServiceInvokePayload): Promise<APIGatewayProxyResult | StripeServiceResponse> => {
+  if (isApiGatewayEvent(event)) {
+    if (apiKey) {
+      const headerKey = event.headers['X-Api-Key'] ?? event.headers['x-api-key'] ?? '';
+      if (headerKey !== apiKey) {
+        return {
+          statusCode: 401,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ success: false, error: 'Unauthorized' }),
+        };
+      }
+    }
+    let body: StripeServiceInvokePayload;
+    try {
+      body = JSON.parse(event.body ?? '{}') as StripeServiceInvokePayload;
+    } catch {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: false, error: 'Invalid JSON body' }),
+      };
+    }
+    const { action, params } = body;
+    const result = await handleAction(action, params ?? {});
+    let statusCode = 200;
+    if (!result.success && result.error) {
+      statusCode = (result.error.includes('not set') || result.error.includes('STRIPE_')) ? 500 : 400;
+    }
+    return {
+      statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(result),
+    };
+  }
+
+  const { action, params } = event;
+  return handleAction(action, params ?? null);
 };

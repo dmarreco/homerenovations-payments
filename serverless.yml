@@ -11,7 +11,8 @@ provider:
   timeout: 30
   environment:
     STAGE: ${self:provider.stage}
-    STRIPE_SERVICE_FUNCTION_NAME: ${self:service}-${self:provider.stage}-stripeService
+    STRIPE_SERVICE_URL: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}/internal/stripe'
+    STRIPE_SERVICE_API_KEY: ${env:STRIPE_SERVICE_API_KEY, 'internal-stripe-dev'}
     LEDGER_TABLE: ${self:custom.ledgerTableName}
     PAYMENTS_TABLE: ${self:custom.paymentsTableName}
     PAYMENT_METHODS_TABLE: ${self:custom.paymentMethodsTableName}
@@ -99,10 +100,6 @@ provider:
           Resource:
             - !GetAtt PaymentRetryQueue.Arn
             - !GetAtt PaymentRetryDlq.Arn
-        - Effect: Allow
-          Action: lambda:InvokeFunction
-          Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-stripeService'
-
 plugins:
   - serverless-esbuild
 
@@ -164,9 +161,14 @@ functions:
 
   stripeService:
     handler: src/functions/stripeService.handler
+    events:
+      - http:
+          path: internal/stripe
+          method: post
     environment:
       STRIPE_SECRET_KEY: ${ssm:/sfr3/${self:provider.stage}/STRIPE_SECRET_KEY~true}
       STRIPE_WEBHOOK_SECRET: ${ssm:/sfr3/${self:provider.stage}/STRIPE_WEBHOOK_SECRET~true}
+      STRIPE_SERVICE_API_KEY: ${env:STRIPE_SERVICE_API_KEY, 'internal-stripe-dev'}
 
   # Story 4 - Post Charges
   postCharge:

@@ -7,8 +7,8 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const handler: ScheduledHandler = async () => {
   const config = getConfig();
-  if (!config.stripeServiceFunctionName || !config.filesBucketName) return;
-  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  if (!config.stripeServiceUrl || !config.filesBucketName) return;
+  const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const dayStr = yesterday.toISOString().slice(0, 10);

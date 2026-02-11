@@ -15,12 +15,12 @@ npm install
 
 ## Environment (for deploy)
 
-Stripe access is centralized in the **stripeService** Lambda. Only that Lambda needs Stripe credentials; other Lambdas call it via Lambda invoke. Set Stripe secrets in AWS Systems Manager Parameter Store so the stripeService function can read them:
+Stripe access is centralized in the **stripeService** Lambda. Only that Lambda needs Stripe credentials; other Lambdas call it over **HTTP** (POST to `/internal/stripe` with body `{ action, params }`). Set Stripe secrets in AWS Systems Manager Parameter Store so the stripeService function can read them:
 
 - `/sfr3/<stage>/STRIPE_SECRET_KEY` – Stripe secret key (test for dev)
 - `/sfr3/<stage>/STRIPE_WEBHOOK_SECRET` – From Stripe Dashboard > Webhooks (after creating endpoint)
 
-The framework sets `STRIPE_SERVICE_FUNCTION_NAME` for all Lambdas so they can invoke the stripeService. No other Lambda needs Stripe keys.
+The framework sets `STRIPE_SERVICE_URL` (and optionally `STRIPE_SERVICE_API_KEY`) for all Lambdas so they can call the stripeService over HTTP. No other Lambda needs Stripe keys.
 
 - `FROM_EMAIL` – Verified SES sender address (for all Lambdas that send email)
 ## Deploy

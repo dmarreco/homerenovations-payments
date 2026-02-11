@@ -9,8 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const handler: SQSHandler = async (event) => {
   const config = getConfig();
-  if (!config.stripeServiceFunctionName) return;
-  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  if (!config.stripeServiceUrl) return;
+  const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
   for (const record of event.Records ?? []) {
     let body: { paymentId: string };
     try {

@@ -21,10 +21,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body must include type and paymentMethodId (from Stripe Elements)' }) };
   }
   const config = getConfig();
-  if (!config.stripeServiceFunctionName) {
+  if (!config.stripeServiceUrl) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
-  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
   const now = new Date().toISOString();
   const methodId = uuidv4();
 

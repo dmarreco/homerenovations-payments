@@ -15,7 +15,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
   const config = getConfig();
-  if (!config.disputesTableName || !config.stripeServiceFunctionName) {
+  if (!config.disputesTableName || !config.stripeServiceUrl) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Disputes not configured' }) };
   }
   const record = await getItem<{ stripeDisputeId: string; status: string }>(
@@ -35,7 +35,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     );
   }
   if (body.submit) {
-    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+    const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
     await stripe.submitDisputeEvidence(record.stripeDisputeId, {
       customer_communication: body.evidenceUrl,
     });

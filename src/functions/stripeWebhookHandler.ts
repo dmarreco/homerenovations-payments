@@ -10,11 +10,11 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   const config = getConfig();
   const signature = event.headers['Stripe-Signature'] ?? event.headers['stripe-signature'] ?? '';
   const payload = event.body ?? '';
-  if (!config.stripeServiceFunctionName) {
+  if (!config.stripeServiceUrl) {
     console.error('Stripe service not configured');
     return { statusCode: 500, body: '' };
   }
-  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
   const valid = await stripe.verifyWebhookSignature(payload, signature);
   if (!valid) {
     return { statusCode: 400, body: 'Invalid signature' };

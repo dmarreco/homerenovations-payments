@@ -23,7 +23,8 @@ export interface Config {
   eventBusName: string;
   firehoseStreamName: string;
   filesBucketName: string;
-  stripeServiceFunctionName: string;
+  stripeServiceUrl: string;
+  stripeServiceApiKey: string;
   fromEmail: string;
 }
 
@@ -39,7 +40,8 @@ export function getConfig(): Config {
     eventBusName: getEnv('EVENT_BUS_NAME'),
     firehoseStreamName: getEnv('FIREHOSE_STREAM_NAME'),
     filesBucketName: getEnv('FILES_BUCKET'),
-    stripeServiceFunctionName: getEnv('STRIPE_SERVICE_FUNCTION_NAME'),
+    stripeServiceUrl: getEnv('STRIPE_SERVICE_URL'),
+    stripeServiceApiKey: getEnv('STRIPE_SERVICE_API_KEY'),
     fromEmail: getEnv('FROM_EMAIL', 'noreply@example.com'),
   };
 }

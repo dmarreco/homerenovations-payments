@@ -145,18 +145,18 @@ flowchart TB
     WebhookEP --> WebhookFn
 
     PaymentMethodFn --> MethodsTbl
-    PaymentMethodFn -->|invoke| StripeSvc
-    MakePaymentFn -->|invoke| StripeSvc
+    PaymentMethodFn -->|HTTP POST| StripeSvc
+    MakePaymentFn -->|HTTP POST| StripeSvc
     MakePaymentFn --> PaymentsTbl
     LedgerWriteFn --> LedgerTbl
     LedgerReadFn --> LedgerTbl
     DisputeFn --> DisputesTbl
-    DisputeFn -->|invoke| StripeSvc
-    WebhookFn -->|invoke verify| StripeSvc
-    RetryFn -->|invoke| StripeSvc
+    DisputeFn -->|HTTP POST| StripeSvc
+    WebhookFn -->|HTTP POST verify| StripeSvc
+    RetryFn -->|HTTP POST| StripeSvc
     RetryFn --> PaymentsTbl
-    AutopaySweepFn -->|invoke| StripeSvc
-    ReconcileFn -->|invoke| StripeSvc
+    AutopaySweepFn -->|HTTP POST| StripeSvc
+    ReconcileFn -->|HTTP POST| StripeSvc
 
     StripeSvc --> Stripe
     ReconcileFn --> PaymentsTbl
@@ -368,7 +368,7 @@ The snapshot write is a separate DynamoDB put that is idempotent (same version, 
 | `getBalance` | API Gateway | Rebuild current balance from latest snapshot + events |
 | `getHistory` | API Gateway | Query Payments table GSI1 for resident's payment list |
 | `stripeWebhookHandler` | API Gateway (webhook endpoint) | Verify Stripe signature (via stripeService), update payment status, trigger ledger event |
-| `stripeService` | Lambda invoke only | Single point of access to Stripe API; all Stripe operations go through this Lambda |
+| `stripeService` | HTTP POST (internal route) | Single point of access to Stripe API; all Stripe operations go through this Lambda via POST /internal/stripe |
 | `streamProcessor` | DynamoDB Streams | Transform DynamoDB inserts into domain events, publish to EventBridge + Firehose |
 | `autopaySweep` | EventBridge Scheduler (daily) | Query active autopay enrollments due today, initiate payments |
 | `lateFeeSweep` | EventBridge Scheduler (daily) | Check overdue balances past grace period, post late fee events |
@@ -425,7 +425,7 @@ This schema flows into both EventBridge (for routing rules) and Firehose/S3 (for
 ```
 Resident -> API GW -> makePayment Lambda
   1. Validate payment method exists in Methods table
-  2. Call stripeService (Lambda invoke) to create payment intent
+  2. Call stripeService (HTTP POST) to create payment intent
   3. Write to Payments table: status = PENDING, stripePaymentIntentId = pi_xxx
   4. Return confirmation with paymentId to resident
 
@@ -538,7 +538,7 @@ EventBridge Scheduler (daily 2am) -> dailyReconciliation Lambda
 
 ### 8.1 Dedicated Stripe Service
 
-Stripe access is centralized in a single **stripeService** Lambda. No other Lambda holds Stripe credentials or talks to the Stripe API directly. Other Lambdas (enrollPaymentMethod, makePayment, retryPayment, autopaySweep, handleDispute, stripeWebhookHandler, dailyReconciliation, deletePaymentMethod) call the Stripe service via **synchronous Lambda invoke** with an action and params. The stripeService Lambda is the only component that uses the Stripe SDK (via the Stripe adapter). Credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are scoped to this Lambda's environment (e.g. from SSM). A **stripeServiceClient** implements the same `PaymentProviderPort` interface by invoking the stripeService Lambda, so business logic remains unchanged.
+Stripe access is centralized in a single **stripeService** Lambda. No other Lambda holds Stripe credentials or talks to the Stripe API directly. Other Lambdas call the Stripe service over **HTTP** (POST to `/internal/stripe` with body `{ action, params }`). The stripeService Lambda is exposed via API Gateway and is the only component that uses the Stripe SDK (via the Stripe adapter). Credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are scoped to this Lambda's environment (e.g. from SSM). A **stripeServiceClient** implements the same `PaymentProviderPort` interface by calling the stripeService HTTP endpoint, so business logic remains unchanged.
 
 ### 8.2 Stripe Adapter (inside stripeService only)
 
@@ -558,7 +558,7 @@ export interface PaymentProviderPort {
 }
 
 // adapters/stripeAdapter.ts - used only by stripeService
-// adapters/stripeServiceClient.ts - implements PaymentProviderPort via Lambda invoke
+// adapters/stripeServiceClient.ts - implements PaymentProviderPort via HTTP
 ```
 
 ### 8.3 ACH via Stripe
@@ -836,7 +836,7 @@ sfr3-payments/
 
     adapters/                     # External service implementations
       stripeAdapter.ts            # Used only by stripeService Lambda
-      stripeServiceClient.ts      # Implements PaymentProviderPort via Lambda invoke
+      stripeServiceClient.ts      # Implements PaymentProviderPort via HTTP
       sesAdapter.ts
 
     lib/                          # Shared utilities

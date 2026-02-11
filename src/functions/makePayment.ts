@@ -21,7 +21,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body must include amount (cents) and paymentMethodId' }) };
   }
   const config = getConfig();
-  if (!config.stripeServiceFunctionName) {
+  if (!config.stripeServiceUrl) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
   const methodRecord = await getItem<{ stripePaymentMethodId: string; type: string }>(
@@ -35,7 +35,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   const currency = (body.currency ?? 'usd').toLowerCase();
   const amount = Math.round(body.amount);
   try {
-    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+    const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
     const customerRecord = await getItem<{ stripeCustomerId: string }>(
       config.paymentMethodsTableName,
       { PK: paymentMethodPk(residentId), SK: 'CUSTOMER' }

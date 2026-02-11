@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const handler: ScheduledHandler = async () => {
   const config = getConfig();
-  if (!config.autopayTableName || !config.stripeServiceFunctionName) return;
+  if (!config.autopayTableName || !config.stripeServiceUrl) return;
   const dayOfMonth = new Date().getDate();
   const { items } = await queryItems<{ PK: string; paymentMethodId: string; status: string }>(
     config.autopayTableName,
@@ -18,7 +18,7 @@ export const handler: ScheduledHandler = async () => {
     { ':sg': 'AUTOPAY_ACTIVE', ':day': dayOfMonth },
     { indexName: 'bySweepDay' }
   );
-  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
   for (const enrollment of items.filter((i) => i.status === 'ACTIVE')) {
     const residentId = (enrollment.PK ?? '').replace('RESIDENT#', '');
     const state = await rebuildState(residentId, { tableName: config.ledgerTableName });
