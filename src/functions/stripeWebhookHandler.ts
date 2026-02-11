@@ -2,7 +2,7 @@ import type { APIGatewayProxyHandler } from 'aws-lambda';
 import Stripe from 'stripe';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { getConfig } from '../lib/config';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getPayment, settlePayment, failPayment } from '../domain/payments/payments';
 import { appendEvent } from '../domain/ledger/ledger';
 
@@ -10,12 +10,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   const config = getConfig();
   const signature = event.headers['Stripe-Signature'] ?? event.headers['stripe-signature'] ?? '';
   const payload = event.body ?? '';
-  if (!config.stripeWebhookSecret) {
-    console.error('STRIPE_WEBHOOK_SECRET not set');
+  if (!config.stripeServiceFunctionName) {
+    console.error('Stripe service not configured');
     return { statusCode: 500, body: '' };
   }
-  const stripe = createStripeAdapter(config.stripeSecretKey);
-  if (!stripe.verifyWebhookSignature(payload, signature)) {
+  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
+  const valid = await stripe.verifyWebhookSignature(payload, signature);
+  if (!valid) {
     return { statusCode: 400, body: 'Invalid signature' };
   }
   let parsed: Stripe.Event;

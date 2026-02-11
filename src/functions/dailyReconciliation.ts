@@ -1,14 +1,14 @@
 import type { ScheduledHandler } from 'aws-lambda';
 import { getConfig } from '../lib/config';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const handler: ScheduledHandler = async () => {
   const config = getConfig();
-  if (!config.stripeSecretKey || !config.filesBucketName) return;
-  const stripe = createStripeAdapter(config.stripeSecretKey);
+  if (!config.stripeServiceFunctionName || !config.filesBucketName) return;
+  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const dayStr = yesterday.toISOString().slice(0, 10);

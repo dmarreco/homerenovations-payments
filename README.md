@@ -15,11 +15,14 @@ npm install
 
 ## Environment (for deploy)
 
-Set before `serverless deploy` or in AWS Parameter Store (e.g. `/sfr3/dev/STRIPE_SECRET_KEY`):
+Stripe access is centralized in the **stripeService** Lambda. Only that Lambda needs Stripe credentials; other Lambdas call it via Lambda invoke. Set Stripe secrets in AWS Systems Manager Parameter Store so the stripeService function can read them:
 
-- `STRIPE_SECRET_KEY` – Stripe secret key (test for dev)
-- `STRIPE_WEBHOOK_SECRET` – From Stripe Dashboard > Webhooks (after creating endpoint)
-- `FROM_EMAIL` – Verified SES sender address
+- `/sfr3/<stage>/STRIPE_SECRET_KEY` – Stripe secret key (test for dev)
+- `/sfr3/<stage>/STRIPE_WEBHOOK_SECRET` – From Stripe Dashboard > Webhooks (after creating endpoint)
+
+The framework sets `STRIPE_SERVICE_FUNCTION_NAME` for all Lambdas so they can invoke the stripeService. No other Lambda needs Stripe keys.
+
+- `FROM_EMAIL` – Verified SES sender address (for all Lambdas that send email)
 ## Deploy
 
 ```bash
@@ -36,7 +39,7 @@ Deploy creates: API Gateway, Lambdas, DynamoDB (Ledger, Payments, Payment Method
 2. **Enroll payment method** (card): use Stripe test token `pm_card_visa` or Stripe Elements on frontend; POST `/residents/{residentId}/payment-methods` with `{ "type": "card", "paymentMethodId": "pm_xxx" }`.
 3. **Post a charge**: POST `/residents/{residentId}/charges` with `{ "amount": 2100, "chargeType": "RENT", "description": "Rent" }`.
 4. **Make payment**: POST `/residents/{residentId}/payments` with `{ "amount": 2100, "paymentMethodId": "<methodId from step 1>" }`.
-5. **Stripe webhook**: In Stripe Dashboard add webhook endpoint `https://<api>/dev/webhooks/stripe` for `payment_intent.succeeded` and `payment_intent.payment_failed`; use the signing secret as `STRIPE_WEBHOOK_SECRET` (or set in SSM).
+5. **Stripe webhook**: In Stripe Dashboard add webhook endpoint `https://<api>/dev/webhooks/stripe` for `payment_intent.succeeded` and `payment_intent.payment_failed`; store the signing secret in SSM at `/sfr3/<stage>/STRIPE_WEBHOOK_SECRET` (used by stripeService).
 6. **Balance**: GET `/residents/{residentId}/balance` – should reflect payment after webhook.
 7. **History**: GET `/residents/{residentId}/payments`.
 8. **Events**: Check S3 bucket (events lake) for Firehose data; query with Athena using Glue table `sfr3_events_dev.events`.
@@ -54,7 +57,7 @@ Integration test (ledger round-trip) runs only when `DDB_TABLE_LEDGER` is set (e
 - `src/functions/` – Lambda handlers
 - `src/domain/` – Ledger (event sourcing), payments
 - `src/ports/` – Interfaces (payment provider, notification)
-- `src/adapters/` – Stripe, SES
+- `src/adapters/` – Stripe (adapter + stripeServiceClient), SES
 - `src/lib/` – DynamoDB, EventBridge, Firehose, config
 - `src/types/` – Tables, domain events
 - `tests/` – Unit and integration tests

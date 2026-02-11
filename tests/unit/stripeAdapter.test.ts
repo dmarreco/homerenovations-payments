@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { StripeAdapter } from '../../src/adapters/stripeAdapter';
 
 describe('StripeAdapter', () => {
-  it('verifyWebhookSignature returns false when secret is empty', () => {
+  it('verifyWebhookSignature returns false when secret is empty', async () => {
     const mockStripe = {
       webhooks: {
         constructEvent: vi.fn(() => {
@@ -13,7 +13,7 @@ describe('StripeAdapter', () => {
     const adapter = new StripeAdapter(mockStripe);
     const orig = process.env.STRIPE_WEBHOOK_SECRET;
     process.env.STRIPE_WEBHOOK_SECRET = '';
-    expect(adapter.verifyWebhookSignature('body', 'sig')).toBe(false);
+    expect(await adapter.verifyWebhookSignature('body', 'sig')).toBe(false);
     process.env.STRIPE_WEBHOOK_SECRET = orig;
   });
 });

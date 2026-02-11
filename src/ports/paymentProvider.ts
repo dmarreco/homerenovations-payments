@@ -59,5 +59,5 @@ export interface PaymentProviderPort {
   getBalanceTransactions(params: DateRangeParams): Promise<BalanceTransaction[]>;
   getPaymentIntent(paymentIntentId: string): Promise<{ status: string; amount: number } | null>;
   submitDisputeEvidence(disputeId: string, evidence: Evidence): Promise<void>;
-  verifyWebhookSignature(payload: string, signature: string): boolean;
+  verifyWebhookSignature(payload: string, signature: string): Promise<boolean>;
 }

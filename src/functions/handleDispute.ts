@@ -1,7 +1,7 @@
 import type { APIGatewayProxyHandler } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { getItem, updateItem } from '../lib/dynamodb';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   const disputeId = event.pathParameters?.disputeId;
@@ -15,7 +15,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
   const config = getConfig();
-  if (!config.disputesTableName || !config.stripeSecretKey) {
+  if (!config.disputesTableName || !config.stripeServiceFunctionName) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Disputes not configured' }) };
   }
   const record = await getItem<{ stripeDisputeId: string; status: string }>(
@@ -35,7 +35,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     );
   }
   if (body.submit) {
-    const stripe = createStripeAdapter(config.stripeSecretKey);
+    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
     await stripe.submitDisputeEvidence(record.stripeDisputeId, {
       customer_communication: body.evidenceUrl,
     });

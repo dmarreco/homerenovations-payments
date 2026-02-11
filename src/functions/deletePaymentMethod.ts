@@ -1,6 +1,6 @@
 import type { APIGatewayProxyHandler } from 'aws-lambda';
 import { getConfig } from '../lib/config';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem, deleteItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 
@@ -11,8 +11,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing residentId or methodId' }) };
   }
   const config = getConfig();
-  if (!config.stripeSecretKey) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe not configured' }) };
+  if (!config.stripeServiceFunctionName) {
+    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
   const record = await getItem<{ stripePaymentMethodId: string }>(
     config.paymentMethodsTableName,
@@ -22,7 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 404, body: JSON.stringify({ error: 'Payment method not found' }) };
   }
   try {
-    const stripe = createStripeAdapter(config.stripeSecretKey);
+    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
     await stripe.detachPaymentMethod(record.stripePaymentMethodId);
     await deleteItem(config.paymentMethodsTableName, {
       PK: paymentMethodPk(residentId),

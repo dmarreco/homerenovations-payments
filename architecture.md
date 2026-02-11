@@ -103,6 +103,7 @@ flowchart TB
         ReceiptFn[generateReceipt]
         DisputeFn[handleDispute]
         StreamFn[streamProcessor]
+        StripeSvc[stripeService]
     end
 
     subgraph events [Event-Driven Backbone]
@@ -144,12 +145,22 @@ flowchart TB
     WebhookEP --> WebhookFn
 
     PaymentMethodFn --> MethodsTbl
-    PaymentMethodFn --> Stripe
-    MakePaymentFn --> Stripe
+    PaymentMethodFn -->|invoke| StripeSvc
+    MakePaymentFn -->|invoke| StripeSvc
     MakePaymentFn --> PaymentsTbl
     LedgerWriteFn --> LedgerTbl
     LedgerReadFn --> LedgerTbl
     DisputeFn --> DisputesTbl
+    DisputeFn -->|invoke| StripeSvc
+    WebhookFn -->|invoke verify| StripeSvc
+    RetryFn -->|invoke| StripeSvc
+    RetryFn --> PaymentsTbl
+    AutopaySweepFn -->|invoke| StripeSvc
+    ReconcileFn -->|invoke| StripeSvc
+
+    StripeSvc --> Stripe
+    ReconcileFn --> PaymentsTbl
+    ReconcileFn --> S3Files
 
     LedgerTbl -->|Stream| DDBStream
     PaymentsTbl -->|Stream| DDBStream
@@ -166,21 +177,14 @@ flowchart TB
     RetryQ --> RetryFn
     RetryQ -->|max retries exceeded| DLQ
 
-    RetryFn --> Stripe
-    RetryFn --> PaymentsTbl
-
     Scheduler -->|daily 6am| AutopaySweepFn
     Scheduler -->|daily 11pm| LateFeeSweepFn
     Scheduler -->|daily 2am| ReconcileFn
 
     AutopaySweepFn --> AutopayTbl
     AutopaySweepFn --> LedgerTbl
-    AutopaySweepFn --> Stripe
     AutopaySweepFn --> PaymentsTbl
     LateFeeSweepFn --> LedgerTbl
-    ReconcileFn --> PaymentsTbl
-    ReconcileFn --> Stripe
-    ReconcileFn --> S3Files
 
     NotifyFn --> SES
     ReceiptFn --> S3Files
@@ -363,7 +367,8 @@ The snapshot write is a separate DynamoDB put that is idempotent (same version, 
 | `applyPayment` | Internal (webhook flow) | Append a `PAYMENT_APPLIED` event to the Ledger table |
 | `getBalance` | API Gateway | Rebuild current balance from latest snapshot + events |
 | `getHistory` | API Gateway | Query Payments table GSI1 for resident's payment list |
-| `stripeWebhookHandler` | API Gateway (webhook endpoint) | Verify Stripe signature, update payment status, trigger ledger event |
+| `stripeWebhookHandler` | API Gateway (webhook endpoint) | Verify Stripe signature (via stripeService), update payment status, trigger ledger event |
+| `stripeService` | Lambda invoke only | Single point of access to Stripe API; all Stripe operations go through this Lambda |
 | `streamProcessor` | DynamoDB Streams | Transform DynamoDB inserts into domain events, publish to EventBridge + Firehose |
 | `autopaySweep` | EventBridge Scheduler (daily) | Query active autopay enrollments due today, initiate payments |
 | `lateFeeSweep` | EventBridge Scheduler (daily) | Check overdue balances past grace period, post late fee events |
@@ -420,14 +425,14 @@ This schema flows into both EventBridge (for routing rules) and Firehose/S3 (for
 ```
 Resident -> API GW -> makePayment Lambda
   1. Validate payment method exists in Methods table
-  2. Call Stripe PaymentIntents.create() via adapter
+  2. Call stripeService (Lambda invoke) to create payment intent
   3. Write to Payments table: status = PENDING, stripePaymentIntentId = pi_xxx
   4. Return confirmation with paymentId to resident
 
   ... Stripe processes asynchronously ...
 
   5. Stripe fires payment_intent.succeeded webhook -> API GW -> stripeWebhookHandler
-  6. Verify Stripe signature
+  6. Verify Stripe signature (via stripeService)
   7. Update Payments table: status = SETTLED
   8. Append PAYMENT_APPLIED event to Ledger table (+ snapshot if due)
   9. DynamoDB Stream -> streamProcessor -> EventBridge
@@ -455,7 +460,7 @@ EventBridge Scheduler (daily 6am) -> autopaySweep Lambda
   2. For each active enrollment:
      a. Rebuild current balance from Ledger (snapshot + events)
      b. If balance > 0:
-        - Call Stripe PaymentIntents.create() via adapter
+        - Call stripeService to create payment intent
         - Write to Payments table: status = PENDING
      c. If balance <= 0: skip (nothing owed)
   3. Publish autopay.sweep.complete event to EventBridge
@@ -486,7 +491,7 @@ Stripe fires payment_intent.payment_failed webhook -> stripeWebhookHandler
        Route to DLQ, publish payment.permanently_failed event
   4. SQS triggers retryPayment Lambda after delay:
      a. Read payment from Payments table
-     b. Call Stripe PaymentIntents.create() with same payment method
+     b. Call stripeService to create payment intent with same payment method
      c. Write new attempt to Payments table
   5. DLQ depth > 0 -> CloudWatch Alarm -> alerts property manager
   6. Each failure -> sendNotification -> email to resident
@@ -502,7 +507,7 @@ Stripe fires charge.dispute.created webhook -> stripeWebhookHandler
 
 Finance Analyst responds via PM Portal -> API GW -> handleDispute Lambda
   4. Upload evidence to S3
-  5. Submit evidence to Stripe via adapter
+  5. Submit evidence via stripeService
   6. Update Disputes table: status = UNDER_REVIEW
 
 Stripe fires charge.dispute.closed webhook -> stripeWebhookHandler
@@ -515,7 +520,7 @@ Stripe fires charge.dispute.closed webhook -> stripeWebhookHandler
 
 ```
 EventBridge Scheduler (daily 2am) -> dailyReconciliation Lambda
-  1. Fetch Stripe balance transactions for previous day via API
+  1. Fetch Stripe balance transactions for previous day via stripeService
   2. Query Payments table for all SETTLED payments for previous day
   3. Match by stripePaymentIntentId:
      - Matched: update Payments table reconciledAt timestamp
@@ -531,9 +536,13 @@ EventBridge Scheduler (daily 2am) -> dailyReconciliation Lambda
 
 ## 8. Payment Provider Integration
 
-### 8.1 Stripe Adapter
+### 8.1 Dedicated Stripe Service
 
-A thin adapter abstracts the Stripe SDK behind a port interface. This keeps the door open for adding providers later without over-engineering now.
+Stripe access is centralized in a single **stripeService** Lambda. No other Lambda holds Stripe credentials or talks to the Stripe API directly. Other Lambdas (enrollPaymentMethod, makePayment, retryPayment, autopaySweep, handleDispute, stripeWebhookHandler, dailyReconciliation, deletePaymentMethod) call the Stripe service via **synchronous Lambda invoke** with an action and params. The stripeService Lambda is the only component that uses the Stripe SDK (via the Stripe adapter). Credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are scoped to this Lambda's environment (e.g. from SSM). A **stripeServiceClient** implements the same `PaymentProviderPort` interface by invoking the stripeService Lambda, so business logic remains unchanged.
+
+### 8.2 Stripe Adapter (inside stripeService only)
+
+A thin adapter abstracts the Stripe SDK behind a port interface. It runs only inside the stripeService Lambda.
 
 ```typescript
 // ports/paymentProvider.ts
@@ -543,22 +552,20 @@ export interface PaymentProviderPort {
   detachPaymentMethod(paymentMethodId: string): Promise<void>;
   createPaymentIntent(params: PaymentIntentParams): Promise<PaymentIntentResult>;
   getBalanceTransactions(params: DateRangeParams): Promise<BalanceTransaction[]>;
+  getPaymentIntent(paymentIntentId: string): Promise<{ status: string; amount: number } | null>;
   submitDisputeEvidence(disputeId: string, evidence: Evidence): Promise<void>;
-  verifyWebhookSignature(payload: string, signature: string): boolean;
+  verifyWebhookSignature(payload: string, signature: string): Promise<boolean>;
 }
 
-// adapters/stripeAdapter.ts
-export class StripeAdapter implements PaymentProviderPort {
-  constructor(private stripe: Stripe) {}
-  // ... wraps Stripe SDK calls
-}
+// adapters/stripeAdapter.ts - used only by stripeService
+// adapters/stripeServiceClient.ts - implements PaymentProviderPort via Lambda invoke
 ```
 
-### 8.2 ACH via Stripe
+### 8.3 ACH via Stripe
 
 ACH bank account enrollment is handled via **Stripe ACH Direct Debit** (and Stripe Financial Connections where applicable). No separate bank-verification provider is used; the system is Stripe-only for payment methods.
 
-### 8.3 Webhook Security
+### 8.4 Webhook Security
 
 All Stripe webhooks are verified before processing:
 
@@ -567,7 +574,7 @@ All Stripe webhooks are verified before processing:
 3. Raw webhook payload is logged to the audit trail (idempotency key = Stripe event ID)
 4. Duplicate events (same Stripe event ID) are detected and skipped
 
-### 8.4 Payment Method Trade-offs
+### 8.5 Payment Method Trade-offs
 
 | Method | Settlement Time | Cost to SFR3 | Failure Risk | Notes |
 |---|---|---|---|---|
@@ -803,6 +810,7 @@ sfr3-payments/
       getBalance.ts
       getHistory.ts
       stripeWebhookHandler.ts
+      stripeService.ts
       streamProcessor.ts
       autopaySweep.ts
       lateFeeSweep.ts
@@ -827,7 +835,8 @@ sfr3-payments/
       receiptGenerator.ts
 
     adapters/                     # External service implementations
-      stripeAdapter.ts
+      stripeAdapter.ts            # Used only by stripeService Lambda
+      stripeServiceClient.ts      # Implements PaymentProviderPort via Lambda invoke
       sesAdapter.ts
 
     lib/                          # Shared utilities

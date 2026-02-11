@@ -94,7 +94,7 @@ export class StripeAdapter implements PaymentProviderPort {
     });
   }
 
-  verifyWebhookSignature(payload: string, signature: string): boolean {
+  async verifyWebhookSignature(payload: string, signature: string): Promise<boolean> {
     try {
       this.stripe.webhooks.constructEvent(
         payload,

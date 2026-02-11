@@ -2,7 +2,7 @@ import type { ScheduledHandler } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { queryItems } from '../lib/dynamodb';
 import { rebuildState } from '../domain/ledger/ledger';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { initiatePayment } from '../domain/payments/payments';
@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const handler: ScheduledHandler = async () => {
   const config = getConfig();
-  if (!config.autopayTableName || !config.stripeSecretKey) return;
+  if (!config.autopayTableName || !config.stripeServiceFunctionName) return;
   const dayOfMonth = new Date().getDate();
   const { items } = await queryItems<{ PK: string; paymentMethodId: string; status: string }>(
     config.autopayTableName,
@@ -18,7 +18,7 @@ export const handler: ScheduledHandler = async () => {
     { ':sg': 'AUTOPAY_ACTIVE', ':day': dayOfMonth },
     { indexName: 'bySweepDay' }
   );
-  const stripe = createStripeAdapter(config.stripeSecretKey);
+  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
   for (const enrollment of items.filter((i) => i.status === 'ACTIVE')) {
     const residentId = (enrollment.PK ?? '').replace('RESIDENT#', '');
     const state = await rebuildState(residentId, { tableName: config.ledgerTableName });

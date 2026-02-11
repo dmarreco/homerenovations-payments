@@ -11,6 +11,7 @@ provider:
   timeout: 30
   environment:
     STAGE: ${self:provider.stage}
+    STRIPE_SERVICE_FUNCTION_NAME: ${self:service}-${self:provider.stage}-stripeService
     LEDGER_TABLE: ${self:custom.ledgerTableName}
     PAYMENTS_TABLE: ${self:custom.paymentsTableName}
     PAYMENT_METHODS_TABLE: ${self:custom.paymentMethodsTableName}
@@ -98,6 +99,9 @@ provider:
           Resource:
             - !GetAtt PaymentRetryQueue.Arn
             - !GetAtt PaymentRetryDlq.Arn
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-stripeService'
 
 plugins:
   - serverless-esbuild
@@ -157,6 +161,12 @@ functions:
       - http:
           path: webhooks/stripe
           method: post
+
+  stripeService:
+    handler: src/functions/stripeService.handler
+    environment:
+      STRIPE_SECRET_KEY: ${ssm:/sfr3/${self:provider.stage}/STRIPE_SECRET_KEY~true}
+      STRIPE_WEBHOOK_SECRET: ${ssm:/sfr3/${self:provider.stage}/STRIPE_WEBHOOK_SECRET~true}
 
   # Story 4 - Post Charges
   postCharge:

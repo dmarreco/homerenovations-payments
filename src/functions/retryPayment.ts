@@ -3,14 +3,14 @@ import { getConfig } from '../lib/config';
 import { getPayment } from '../domain/payments/payments';
 import { getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { initiatePayment } from '../domain/payments/payments';
 import { v4 as uuidv4 } from 'uuid';
 
 export const handler: SQSHandler = async (event) => {
   const config = getConfig();
-  if (!config.stripeSecretKey) return;
-  const stripe = createStripeAdapter(config.stripeSecretKey);
+  if (!config.stripeServiceFunctionName) return;
+  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
   for (const record of event.Records ?? []) {
     let body: { paymentId: string };
     try {

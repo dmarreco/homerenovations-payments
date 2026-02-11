@@ -1,7 +1,7 @@
 import type { APIGatewayProxyHandler } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../lib/config';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { putItem, getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { ensureLedgerInitialized } from '../domain/ledger/ledger';
@@ -21,10 +21,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body must include type and paymentMethodId (from Stripe Elements)' }) };
   }
   const config = getConfig();
-  if (!config.stripeSecretKey) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe not configured' }) };
+  if (!config.stripeServiceFunctionName) {
+    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
-  const stripe = createStripeAdapter(config.stripeSecretKey);
+  const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
   const now = new Date().toISOString();
   const methodId = uuidv4();
 

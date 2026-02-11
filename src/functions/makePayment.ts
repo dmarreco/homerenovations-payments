@@ -1,7 +1,7 @@
 import type { APIGatewayProxyHandler } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../lib/config';
-import { createStripeAdapter } from '../adapters/stripeAdapter';
+import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { initiatePayment } from '../domain/payments/payments';
@@ -21,8 +21,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Body must include amount (cents) and paymentMethodId' }) };
   }
   const config = getConfig();
-  if (!config.stripeSecretKey) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe not configured' }) };
+  if (!config.stripeServiceFunctionName) {
+    return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
   const methodRecord = await getItem<{ stripePaymentMethodId: string; type: string }>(
     config.paymentMethodsTableName,
@@ -35,7 +35,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   const currency = (body.currency ?? 'usd').toLowerCase();
   const amount = Math.round(body.amount);
   try {
-    const stripe = createStripeAdapter(config.stripeSecretKey);
+    const stripe = createStripeServiceClient(config.stripeServiceFunctionName);
     const customerRecord = await getItem<{ stripeCustomerId: string }>(
       config.paymentMethodsTableName,
       { PK: paymentMethodPk(residentId), SK: 'CUSTOMER' }
