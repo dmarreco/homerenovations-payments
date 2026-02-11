@@ -1,0 +1,631 @@
+service: sfr3-payments
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    LEDGER_TABLE: ${self:custom.ledgerTableName}
+    PAYMENTS_TABLE: ${self:custom.paymentsTableName}
+    PAYMENT_METHODS_TABLE: ${self:custom.paymentMethodsTableName}
+    AUTOPAY_TABLE: ${self:custom.autopayTableName}
+    PAYMENT_RETRY_QUEUE_URL: !Ref PaymentRetryQueue
+    DISPUTES_TABLE: ${self:custom.disputesTableName}
+    EVENT_BUS_NAME: ${self:custom.eventBusName}
+    FIREHOSE_STREAM_NAME: ${self:custom.firehoseStreamName}
+    FILES_BUCKET: ${self:custom.filesBucketName}
+    EVENTS_LAKE_BUCKET: ${self:custom.eventsLakeBucketName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - !GetAtt LedgerTable.Arn
+            - !GetAtt PaymentsTable.Arn
+            - !GetAtt PaymentMethodsTable.Arn
+            - !GetAtt AutopayTable.Arn
+            - !GetAtt DisputesTable.Arn
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - !Sub '${LedgerTable.Arn}/index/*'
+            - !Sub '${PaymentsTable.Arn}/index/*'
+            - !Sub '${AutopayTable.Arn}/index/*'
+        - Effect: Allow
+          Action:
+            - events:PutEvents
+            - events:PutTargets
+            - events:PutRule
+            - events:DescribeRule
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - firehose:PutRecord
+            - firehose:PutRecordBatch
+          Resource: !GetAtt EventsFirehose.Arn
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource:
+            - !Sub '${FilesBucket.Arn}/*'
+            - !Sub '${EventsLakeBucket.Arn}/*'
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sfr3/${self:provider.stage}/*'
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - cloudwatch:PutMetricData
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:GetQueueUrl
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - !GetAtt PaymentRetryQueue.Arn
+            - !GetAtt PaymentRetryDlq.Arn
+
+plugins:
+  - serverless-esbuild
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude:
+      - aws-sdk
+    target: node20
+    define:
+      'require.resolve': undefined
+    platform: node
+    concurrency: 10
+  ledgerTableName: ${self:service}-${self:provider.stage}-ledger
+  paymentsTableName: ${self:service}-${self:provider.stage}-payments
+  paymentMethodsTableName: ${self:service}-${self:provider.stage}-payment-methods
+  eventBusName: sfr3-payments-${self:provider.stage}
+  firehoseStreamName: sfr3-events-${self:provider.stage}
+  filesBucketName: ${self:service}-${self:provider.stage}-files-${AWS::AccountId}
+  eventsLakeBucketName: ${self:service}-${self:provider.stage}-events-lake-${AWS::AccountId}
+  autopayTableName: ${self:service}-${self:provider.stage}-autopay
+  paymentRetryQueueName: ${self:service}-${self:provider.stage}-payment-retry
+  paymentRetryDlqName: ${self:service}-${self:provider.stage}-payment-retry-dlq
+  disputesTableName: ${self:service}-${self:provider.stage}-disputes
+
+functions:
+  # Story 1 - Enroll Payment Method
+  enrollPaymentMethod:
+    handler: src/functions/enrollPaymentMethod.handler
+    events:
+      - http:
+          path: residents/{residentId}/payment-methods
+          method: post
+          cors: true
+  deletePaymentMethod:
+    handler: src/functions/deletePaymentMethod.handler
+    events:
+      - http:
+          path: residents/{residentId}/payment-methods/{methodId}
+          method: delete
+          cors: true
+
+  # Story 2 - Make a One-Time Payment
+  makePayment:
+    handler: src/functions/makePayment.handler
+    events:
+      - http:
+          path: residents/{residentId}/payments
+          method: post
+          cors: true
+  stripeWebhookHandler:
+    handler: src/functions/stripeWebhookHandler.handler
+    events:
+      - http:
+          path: webhooks/stripe
+          method: post
+
+  # Story 4 - Post Charges
+  postCharge:
+    handler: src/functions/postCharge.handler
+    events:
+      - http:
+          path: residents/{residentId}/charges
+          method: post
+          cors: true
+  getBalance:
+    handler: src/functions/getBalance.handler
+    events:
+      - http:
+          path: residents/{residentId}/balance
+          method: get
+          cors: true
+
+  # Story 9 - Payment History and Receipts
+  getHistory:
+    handler: src/functions/getHistory.handler
+    events:
+      - http:
+          path: residents/{residentId}/payments
+          method: get
+          cors: true
+  getReceiptUrl:
+    handler: src/functions/getReceiptUrl.handler
+    events:
+      - http:
+          path: residents/{residentId}/payments/{paymentId}/receipt
+          method: get
+          cors: true
+  generateReceipt:
+    handler: src/functions/generateReceipt.handler
+    events:
+      - eventBridge:
+          eventBus: ${self:custom.eventBusName}
+          pattern:
+            source:
+              - sfr3.payments
+            detail-type:
+              - payment.settled
+
+  # Story 10 - Event Pipeline
+  streamProcessor:
+    handler: src/functions/streamProcessor.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt LedgerTable.StreamArn
+          batchSize: 10
+          startingPosition: LATEST
+      - stream:
+          type: dynamodb
+          arn: !GetAtt PaymentsTable.StreamArn
+          batchSize: 10
+          startingPosition: LATEST
+  sendNotification:
+    handler: src/functions/sendNotification.handler
+    events:
+      - eventBridge:
+          eventBus: ${self:custom.eventBusName}
+          pattern:
+            source:
+              - sfr3.payments
+              - sfr3.ledger
+            detail-type:
+              - payment.settled
+              - payment.failed
+              - charge.posted
+              - late_fee.applied
+
+  # Release 2 - Automation
+  enrollAutopay:
+    handler: src/functions/enrollAutopay.handler
+    events:
+      - http:
+          path: residents/{residentId}/autopay
+          method: post
+          cors: true
+  cancelAutopay:
+    handler: src/functions/cancelAutopay.handler
+    events:
+      - http:
+          path: residents/{residentId}/autopay
+          method: delete
+          cors: true
+  autopaySweep:
+    handler: src/functions/autopaySweep.handler
+    events:
+      - schedule: cron(0 11 * * ? *)  # 6am UTC = 11pm/6am depending on region
+  lateFeeSweep:
+    handler: src/functions/lateFeeSweep.handler
+    events:
+      - schedule: cron(0 4 * * ? *)   # 11pm UTC = 4am/11pm depending on region
+  retryPayment:
+    handler: src/functions/retryPayment.handler
+    events:
+      - sqs:
+          arn: !GetAtt PaymentRetryQueue.Arn
+          batchSize: 1
+
+  # Release 3 - Financial Ops
+  handleDispute:
+    handler: src/functions/handleDispute.handler
+    events:
+      - http:
+          path: disputes/{disputeId}/evidence
+          method: put
+          cors: true
+  dailyReconciliation:
+    handler: src/functions/dailyReconciliation.handler
+    events:
+      - schedule: cron(0 7 * * ? *)  # 2am UTC
+
+resources:
+  Resources:
+    # DynamoDB Tables (Phase 1 - inline for Serverless refs; full def in resources/dynamodb.yml pattern)
+    LedgerTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.ledgerTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    PaymentsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.paymentsTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: residentId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: byResident
+            KeySchema:
+              - AttributeName: residentId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+
+    PaymentMethodsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.paymentMethodsTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+
+    AutopayTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.autopayTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: sweepGroup
+            AttributeType: S
+          - AttributeName: chargeDay
+            AttributeType: N
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: bySweepDay
+            KeySchema:
+              - AttributeName: sweepGroup
+                KeyType: HASH
+              - AttributeName: chargeDay
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    PaymentRetryDlq:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.paymentRetryDlqName}
+    PaymentRetryQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.paymentRetryQueueName}
+        VisibilityTimeout: 300
+        MessageRetentionPeriod: 1209600
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt PaymentRetryDlq.Arn
+          maxReceiveCount: 3
+
+    DisputesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.disputesTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+
+    # EventBridge
+    PaymentsEventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: ${self:custom.eventBusName}
+
+    # S3 Buckets
+    FilesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.filesBucketName}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    EventsLakeBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.eventsLakeBucketName}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        LifecycleConfiguration:
+          Rules:
+            - Id: GlacierAfterOneYear
+              Status: Enabled
+              Transitions:
+                - Days: 365
+                  StorageClass: GLACIER
+              Filter: {}
+
+    # Firehose
+    EventsFirehoseRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: firehose.amazonaws.com
+              Action: sts:AssumeRole
+    EventsFirehosePolicy:
+      Type: AWS::IAM::Policy
+      Properties:
+        PolicyName: FirehoseToS3
+        Roles:
+          - !Ref EventsFirehoseRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetBucketLocation
+              Resource:
+                - !Sub '${EventsLakeBucket.Arn}/*'
+                - !GetAtt EventsLakeBucket.Arn
+            - Effect: Allow
+              Action:
+                - logs:PutLogEvents
+              Resource: '*'
+    EventsFirehose:
+      Type: AWS::KinesisFirehose::DeliveryStream
+      Properties:
+        DeliveryStreamName: ${self:custom.firehoseStreamName}
+        DeliveryStreamType: DirectPut
+        ExtendedS3DestinationConfiguration:
+          BucketARN: !GetAtt EventsLakeBucket.Arn
+          BufferingHints:
+            IntervalInSeconds: 60
+            SizeInMBs: 1
+          CompressionFormat: UNCOMPRESSED
+          Prefix: 'year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/'
+          ErrorOutputPrefix: 'errors/'
+          RoleARN: !GetAtt EventsFirehoseRole.Arn
+
+    # Cognito - Residents and Staff pools
+    ResidentsUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: ${self:service}-${self:provider.stage}-residents
+        AutoVerifiedAttributes: [email]
+        UsernameAttributes: [email]
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireUppercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+          - Name: preferred_username
+            Required: false
+            Mutable: true
+    ResidentsUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        UserPoolId: !Ref ResidentsUserPool
+        ClientName: residents-client
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+    StaffUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: ${self:service}-${self:provider.stage}-staff
+        AutoVerifiedAttributes: [email]
+        UsernameAttributes: [email]
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: true
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireUppercase: true
+            RequireNumbers: true
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+    StaffUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        UserPoolId: !Ref StaffUserPool
+        ClientName: staff-client
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+
+    # Glue Database and Table for Athena (event schema)
+    GlueDatabase:
+      Type: AWS::Glue::Database
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseInput:
+          Name: sfr3_events_${self:provider.stage}
+          Description: SFR3 payment events for Athena queries
+    GlueTable:
+      Type: AWS::Glue::Table
+      DependsOn: GlueDatabase
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseName: !Ref GlueDatabase
+        TableInput:
+          Name: events
+          TableType: EXTERNAL_TABLE
+          StorageDescriptor:
+            Columns:
+              - Name: eventid
+                Type: string
+              - Name: eventtype
+                Type: string
+              - Name: source
+                Type: string
+              - Name: timestamp
+                Type: string
+              - Name: version
+                Type: string
+              - Name: residentid
+                Type: string
+              - Name: propertyid
+                Type: string
+              - Name: state
+                Type: string
+              - Name: amount
+                Type: double
+              - Name: currency
+                Type: string
+              - Name: paymentmethod
+                Type: string
+              - Name: failurereason
+                Type: string
+              - Name: striperef
+                Type: string
+            Location: !Sub 's3://${EventsLakeBucket}/'
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              SerializationLibrary: org.openx.data.json.serde.JsonSerDe
+
+  Outputs:
+    ApiEndpoint:
+      Description: API Gateway endpoint
+      Value: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+    LedgerTableName:
+      Value: !Ref LedgerTable
+    PaymentsTableName:
+      Value: !Ref PaymentsTable
+    PaymentMethodsTableName:
+      Value: !Ref PaymentMethodsTable
+    EventBusName:
+      Value: !Ref PaymentsEventBus
+    FilesBucketName:
+      Value: !Ref FilesBucket
+    EventsLakeBucketName:
+      Value: !Ref EventsLakeBucket
+    ResidentsUserPoolId:
+      Value: !Ref ResidentsUserPool
+    StaffUserPoolId:
+      Value: !Ref StaffUserPool
+    GlueDatabaseName:
+      Value: !Ref GlueDatabase
+
+    # CloudWatch Dashboard (generic; add Lambda names after deploy for specific functions)
+    PaymentsDashboard:
+      Type: AWS::CloudWatch::Dashboard
+      Properties:
+        DashboardName: ${self:service}-${self:provider.stage}-payments
+        DashboardBody: !Sub |
+          {
+            "widgets": [
+              {
+                "type": "text",
+                "properties": {
+                  "markdown": "# SFR3 Payments\nStage: ${self:provider.stage}\n\nAdd Lambda metrics (Errors, Duration) for makePayment, stripeWebhookHandler, streamProcessor from CloudWatch > Metrics > Lambda."
+                }
+              }
+            ]
+          }

@@ -1,0 +1,10 @@
+node_modules
+dist
+.serverless
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.vitest
+.eslintcache
