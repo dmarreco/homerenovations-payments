@@ -1,11 +1,12 @@
-import type { EventBridgeHandler } from 'aws-lambda';
+import type { EventBridgeEvent } from 'aws-lambda';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import PDFDocument from 'pdfkit';
 import { getConfig } from '../lib/config';
 import { setReceiptUrl } from '../domain/payments/payments';
 import type { DomainEvent } from '../types/events';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: EventBridgeHandler<string, DomainEvent, void> = async (event) => {
+async function generateReceiptHandler(event: EventBridgeEvent<string, DomainEvent>): Promise<void> {
   const detail = event.detail;
   const paymentId = detail.data?.paymentId;
   const residentId = detail.data?.residentId;
@@ -42,4 +43,6 @@ export const handler: EventBridgeHandler<string, DomainEvent, void> = async (eve
     })
   );
   await setReceiptUrl(paymentId, key, { tableName: config.paymentsTableName });
-};
+}
+
+export const handler = withMiddy(generateReceiptHandler, 'generateReceipt');

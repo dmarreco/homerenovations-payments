@@ -1,9 +1,10 @@
-import type { EventBridgeHandler } from 'aws-lambda';
+import type { EventBridgeEvent } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { createSesAdapter } from '../adapters/sesAdapter';
 import type { DomainEvent } from '../types/events';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: EventBridgeHandler<string, DomainEvent, void> = async (event) => {
+async function sendNotificationHandler(event: EventBridgeEvent<string, DomainEvent>): Promise<void> {
   const detail = event.detail;
   const config = getConfig();
   if (!config.fromEmail) return;
@@ -38,4 +39,6 @@ export const handler: EventBridgeHandler<string, DomainEvent, void> = async (eve
     console.error('sendNotification', err);
     throw err;
   }
-};
+}
+
+export const handler = withMiddy(sendNotificationHandler, 'sendNotification');

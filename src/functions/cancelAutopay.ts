@@ -1,10 +1,11 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { deleteItem } from '../lib/dynamodb';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
 const AUTOPAY_PK_PREFIX = 'RESIDENT#';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function cancelAutopayHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const residentId = event.pathParameters?.residentId;
   if (!residentId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing residentId' }) };
@@ -18,4 +19,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     SK: 'AUTOPAY',
   });
   return { statusCode: 204, body: '' };
-};
+}
+
+export const handler = withMiddyHttp(cancelAutopayHandler, 'cancelAutopay');

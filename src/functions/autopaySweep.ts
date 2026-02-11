@@ -1,4 +1,4 @@
-import type { ScheduledHandler } from 'aws-lambda';
+import type { ScheduledEvent } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { queryItems } from '../lib/dynamodb';
 import { rebuildState } from '../domain/ledger/ledger';
@@ -7,8 +7,9 @@ import { getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { initiatePayment } from '../domain/payments/payments';
 import { v4 as uuidv4 } from 'uuid';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: ScheduledHandler = async () => {
+async function autopaySweepHandler(_event: ScheduledEvent): Promise<void> {
   const config = getConfig();
   if (!config.autopayTableName || !config.stripeServiceUrl) return;
   const dayOfMonth = new Date().getDate();
@@ -59,4 +60,6 @@ export const handler: ScheduledHandler = async () => {
       console.error('autopaySweep payment failed', residentId, err);
     }
   }
-};
+}
+
+export const handler = withMiddy(autopaySweepHandler, 'autopaySweep');

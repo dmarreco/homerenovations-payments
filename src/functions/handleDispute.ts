@@ -1,9 +1,10 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { getItem, updateItem } from '../lib/dynamodb';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function handleDisputeHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const disputeId = event.pathParameters?.disputeId;
   if (!disputeId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing disputeId' }) };
@@ -52,4 +53,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ disputeId, message: 'Updated' }),
   };
-};
+}
+
+export const handler = withMiddyHttp(handleDisputeHandler, 'handleDispute');

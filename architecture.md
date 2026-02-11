@@ -709,6 +709,22 @@ This CloudWatch dashboard serves the engineering team. The QuickSight dashboard 
 
 Grace period, late fee amount, and key operational constants are configurable via environment variables (with defaults), so each stage can tune behavior without code changes. See README "Environment (for deploy)" for the full list; examples: `LATE_FEE_GRACE_DAYS`, `LATE_FEE_AMOUNT_CENTS`, `DEFAULT_PAYMENT_MAX_RETRIES`, `PAYMENT_RETRY_BASE_DELAY_SEC`, `LEDGER_SNAPSHOT_INTERVAL`, `RECEIPT_URL_EXPIRES_SEC`, and history/firehose limits.
 
+### 10.5 Lambda Middleware (Middy)
+
+All Lambda handlers are wrapped with [Middy](https://middy.js.org) middleware to provide consistent observability and error handling:
+
+- **Correlation ID**  
+  Every request gets a correlation ID: from the `X-Correlation-Id` (or `x-correlation-id`) header when present, from API Gateway `requestId`, from the first SQS message ID, or generated (UUID). It is stored on the Lambda context and, for HTTP handlers, returned in the response header `X-Correlation-Id` so clients can correlate logs and traces.
+
+- **Request/response logging**  
+  - **INFO**: On entry and exit, a single structured log line is emitted (e.g. `Lambda invoked` / `Lambda completed`) with `functionName` and `correlationId`.  
+  - **TRACE**: When `LOG_LEVEL=trace`, the full event (request) and full response are logged as well. Default `LOG_LEVEL` is `info` to avoid noisy or sensitive payloads in production.
+
+- **HTTP error handling**  
+  For API Gateway (synchronous HTTP) handlers only, `@middy/http-error-handler` is applied. Any uncaught thrown error is turned into a structured HTTP response (`statusCode`, JSON body). This ensures 5xx and consistent error shapes for sync API calls without each handler implementing its own try/catch for unexpected failures.
+
+Shared middleware and wrappers live in `src/lib/middyMiddlewares.ts`. HTTP handlers use `withMiddyHttp`; non-HTTP handlers (SQS, EventBridge, DynamoDB Streams, Scheduled) use `withMiddy` (no HTTP error handler). No changes to `serverless.yml` are required; the exported handler remains the wrapped function.
+
 ---
 
 ## 11. Reliability and Error Handling
@@ -869,6 +885,7 @@ sfr3-payments/
       eventbridge.ts              # EventBridge publish helper
       firehose.ts                 # Firehose put helper
       config.ts                   # Environment config
+      middyMiddlewares.ts         # Middy: correlation ID, request/response logger, HTTP error handler
 
     types/                        # Shared TypeScript types
       events.ts                   # Domain event envelope schema

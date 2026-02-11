@@ -13,6 +13,7 @@ import type {
   DateRangeParams,
   Evidence,
 } from '../ports/paymentProvider';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
 const secretKey = process.env.STRIPE_SECRET_KEY ?? '';
 const apiKey = process.env.STRIPE_SERVICE_API_KEY ?? '';
@@ -122,7 +123,7 @@ async function handleAction(action: string, params: Record<string, unknown> | nu
   }
 }
 
-export const handler = async (event: APIGatewayProxyEvent | StripeServiceInvokePayload): Promise<APIGatewayProxyResult | StripeServiceResponse> => {
+async function stripeServiceHandler(event: APIGatewayProxyEvent | StripeServiceInvokePayload): Promise<APIGatewayProxyResult | StripeServiceResponse> {
   if (isApiGatewayEvent(event)) {
     if (apiKey) {
       const headerKey = event.headers['X-Api-Key'] ?? event.headers['x-api-key'] ?? '';
@@ -159,4 +160,6 @@ export const handler = async (event: APIGatewayProxyEvent | StripeServiceInvokeP
 
   const { action, params } = event;
   return handleAction(action, params ?? null);
-};
+}
+
+export const handler = withMiddyHttp(stripeServiceHandler as (event: APIGatewayProxyEvent, context: unknown) => Promise<APIGatewayProxyResult | StripeServiceResponse>, 'stripeService');

@@ -1,10 +1,11 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { putItem } from '../lib/dynamodb';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
 const AUTOPAY_PK_PREFIX = 'RESIDENT#';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function enrollAutopayHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const residentId = event.pathParameters?.residentId;
   if (!residentId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing residentId' }) };
@@ -37,4 +38,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: 'Autopay enrolled', chargeDay: body.chargeDay }),
   };
-};
+}
+
+export const handler = withMiddyHttp(enrollAutopayHandler, 'enrollAutopay');

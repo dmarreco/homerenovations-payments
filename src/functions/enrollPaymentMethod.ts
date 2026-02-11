@@ -1,12 +1,13 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { putItem, getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { ensureLedgerInitialized } from '../domain/ledger/ledger';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function enrollPaymentMethodHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const residentId = event.pathParameters?.residentId;
   if (!residentId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing residentId' }) };
@@ -67,4 +68,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     console.error('enrollPaymentMethod', err);
     return { statusCode: 500, body: JSON.stringify({ error: message }) };
   }
-};
+}
+
+export const handler = withMiddyHttp(enrollPaymentMethodHandler, 'enrollPaymentMethod');

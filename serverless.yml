@@ -54,6 +54,8 @@ provider:
     GET_HISTORY_DEFAULT_LIMIT: ${env:GET_HISTORY_DEFAULT_LIMIT, '50'}
     # Max page size for GET payment history (default: 100)
     GET_HISTORY_MAX_LIMIT: ${env:GET_HISTORY_MAX_LIMIT, '100'}
+    # info = static entry/exit messages only; trace = also log full event/response (set LOG_LEVEL=trace for debug)
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
   iam:
     role:
       statements:

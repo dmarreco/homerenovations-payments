@@ -1,11 +1,12 @@
-import type { ScheduledHandler } from 'aws-lambda';
+import type { ScheduledEvent } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: ScheduledHandler = async () => {
+async function dailyReconciliationHandler(_event: ScheduledEvent): Promise<void> {
   const config = getConfig();
   if (!config.stripeServiceUrl || !config.filesBucketName) return;
   const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
@@ -62,4 +63,6 @@ export const handler: ScheduledHandler = async () => {
       ContentType: 'text/plain',
     })
   );
-};
+}
+
+export const handler = withMiddy(dailyReconciliationHandler, 'dailyReconciliation');

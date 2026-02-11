@@ -1,10 +1,11 @@
-import type { ScheduledHandler } from 'aws-lambda';
+import type { ScheduledEvent } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { appendEvent, rebuildState } from '../domain/ledger/ledger';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: ScheduledHandler = async () => {
+async function lateFeeSweepHandler(_event: ScheduledEvent): Promise<void> {
   const config = getConfig();
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   const today = new Date().toISOString().slice(0, 10);
@@ -49,4 +50,6 @@ export const handler: ScheduledHandler = async () => {
       );
     }
   }
-};
+}
+
+export const handler = withMiddy(lateFeeSweepHandler, 'lateFeeSweep');

@@ -23,6 +23,8 @@
     "@aws-sdk/client-ssm": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "@middy/core": "^5.5.1",
+    "@middy/http-error-handler": "^5.5.1",
     "pdfkit": "^0.15.0",
     "stripe": "^17.4.0",
     "uuid": "^11.0.3"

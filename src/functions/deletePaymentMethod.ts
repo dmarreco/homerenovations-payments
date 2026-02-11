@@ -1,10 +1,11 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem, deleteItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function deletePaymentMethodHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const residentId = event.pathParameters?.residentId;
   const methodId = event.pathParameters?.methodId;
   if (!residentId || !methodId) {
@@ -34,4 +35,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     console.error('deletePaymentMethod', err);
     return { statusCode: 500, body: JSON.stringify({ error: message }) };
   }
-};
+}
+
+export const handler = withMiddyHttp(deletePaymentMethodHandler, 'deletePaymentMethod');

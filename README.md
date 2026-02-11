@@ -37,14 +37,68 @@ Optional (env vars with defaults; override per stage as needed):
 - `FIREHOSE_BATCH_SIZE` – Batch size for Firehose putRecords (default: 500)
 - `GET_HISTORY_DEFAULT_LIMIT` – Default page size for payment history (default: 50)
 - `GET_HISTORY_MAX_LIMIT` – Max page size for payment history (default: 100)
+- `LOG_LEVEL` – Logging level: `info` (default) logs only static entry/exit messages; `trace` also logs full event and response payloads. Set to `trace` for debugging; leave `info` in production to avoid PII and noise.
+
+## Observability (Lambda middleware)
+
+All Lambdas use [Middy](https://middy.js.org) for:
+
+- **Correlation ID** – Propagated from request header `X-Correlation-Id` or generated. Stored in context and returned in HTTP response header `X-Correlation-Id` for API routes so you can trace a request across logs.
+- **Structured logging** – Entry and exit are logged at INFO with function name and correlation ID. With `LOG_LEVEL=trace`, the full event and response are logged (use only for debugging).
+- **HTTP error handling** – For API Gateway handlers, uncaught errors are converted to a consistent JSON error response.
+
+See [architecture.md](./architecture.md) section 10.5 for details.
 
 ## Deploy
 
-```bash
-npm run deploy:dev
-# or
-npx serverless deploy --stage dev
-```
+### Deploy to your AWS account (using `~/.aws/` credentials)
+
+1. **Ensure AWS CLI uses your account**
+   ```bash
+   aws sts get-caller-identity
+   ```
+   If you use a named profile (e.g. in `~/.aws/credentials`), set it before deploy:
+   ```bash
+   export AWS_PROFILE=your-profile-name
+   ```
+
+2. **Create Stripe parameters in SSM** (required for stripeService)
+   Use Stripe test keys for dev. In [Stripe Dashboard](https://dashboard.stripe.com/test/apikeys) copy the **Secret key** (e.g. `sk_test_...`). Then create the webhook in step 5 below and use its **Signing secret**.
+   ```bash
+   aws ssm put-parameter --name "/sfr3/dev/STRIPE_SECRET_KEY" --value "sk_test_YOUR_KEY" --type SecureString --overwrite
+   aws ssm put-parameter --name "/sfr3/dev/STRIPE_WEBHOOK_SECRET" --value "whsec_YOUR_SECRET" --type SecureString --overwrite
+   ```
+   Replace `dev` with your stage if you deploy with a different one (e.g. `--stage prod`).
+
+3. **Install dependencies and deploy**
+   ```bash
+   cd tmp-prompts/SFR3/sfr3-payments   # or your repo path
+   npm install
+   npm run deploy:dev
+   ```
+   Or with a specific region/profile:
+   ```bash
+   AWS_PROFILE=myprofile npx serverless deploy --stage dev --region us-east-1
+   ```
+
+4. **Note on email (optional)**  
+   Notifications use SES. In SES sandbox you must verify the sender email. Set it via SSM so Lambdas get it:
+   ```bash
+   aws ssm put-parameter --name "/sfr3/dev/FROM_EMAIL" --value "noreply@yourdomain.com" --type String --overwrite
+   ```
+   Then add `FROM_EMAIL: ${ssm:/sfr3/${self:provider.stage}/FROM_EMAIL~true}` to `provider.environment` in `serverless.yml` if you want it from SSM, or set the env var in your shell before deploy. (The app already reads `process.env.FROM_EMAIL` with default `noreply@example.com`.)
+
+5. **After first deploy: Stripe webhook**  
+   Deploy outputs `ApiEndpoint`. Add a webhook in Stripe Dashboard → Developers → Webhooks: URL `https://<ApiEndpoint>/dev/webhooks/stripe`, events `payment_intent.succeeded`, `payment_intent.payment_failed`. Copy the **Signing secret** and update SSM:
+   ```bash
+   aws ssm put-parameter --name "/sfr3/dev/STRIPE_WEBHOOK_SECRET" --value "whsec_..." --type SecureString --overwrite
+   ```
+   Redeploy so the stripeService Lambda picks up the new secret (or leave as placeholder until you have the real secret).
+
+---
+
+**Quick deploy (no SSM yet)**  
+You can run `npm run deploy:dev` before creating SSM parameters. The stack will deploy, but the stripeService Lambda will fail on first Stripe call until `/sfr3/dev/STRIPE_SECRET_KEY` (and optionally `STRIPE_WEBHOOK_SECRET`) exist. Create them and redeploy, or create them first then deploy.
 
 Deploy creates: API Gateway, Lambdas, DynamoDB (Ledger, Payments, Payment Methods), EventBridge bus, Firehose, S3 buckets, Cognito pools, Glue DB/table.
 
@@ -74,7 +128,7 @@ Integration test (ledger round-trip) runs only when `DDB_TABLE_LEDGER` is set (e
 - `src/domain/` – Ledger (event sourcing), payments
 - `src/ports/` – Interfaces (payment provider, notification)
 - `src/adapters/` – Stripe (adapter + stripeServiceClient), SES
-- `src/lib/` – DynamoDB, EventBridge, Firehose, config
+- `src/lib/` – DynamoDB, EventBridge, Firehose, config, Middy middlewares
 - `src/types/` – Tables, domain events
 - `tests/` – Unit and integration tests
 

@@ -1,10 +1,11 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getPayment, refundPayment as refundPaymentDomain } from '../domain/payments/payments';
 import { appendEvent } from '../domain/ledger/ledger';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function refundPaymentHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const residentId = event.pathParameters?.residentId;
   const paymentId = event.pathParameters?.paymentId;
   if (!residentId || !paymentId) {
@@ -119,4 +120,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       amount: refundResult.amount,
     }),
   };
-};
+}
+
+export const handler = withMiddyHttp(refundPaymentHandler, 'refundPayment');

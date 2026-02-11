@@ -1,4 +1,4 @@
-import type { DynamoDBStreamHandler } from 'aws-lambda';
+import type { DynamoDBStreamEvent } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
 import { getConfig } from '../lib/config';
 import { publishEvent } from '../lib/eventbridge';
@@ -7,6 +7,7 @@ import type { DomainEvent } from '../types/events';
 import { ledgerEventTypeToDomainEventType } from '../types/events';
 import type { LedgerEventRecord, LedgerSnapshotRecord } from '../types/tables';
 import type { PaymentRecord } from '../types/tables';
+import { withMiddy } from '../lib/middyMiddlewares';
 
 function ledgerRecordToDomainEvent(
   newImage: Record<string, any>,
@@ -58,7 +59,7 @@ function paymentRecordToDomainEvent(newImage: Record<string, any>): DomainEvent 
   };
 }
 
-export const handler: DynamoDBStreamHandler = async (event) => {
+async function streamProcessorHandler(event: DynamoDBStreamEvent): Promise<void> {
   const config = getConfig();
   const events: DomainEvent[] = [];
   for (const record of event.Records ?? []) {
@@ -87,7 +88,9 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       console.error('streamProcessor putRecord', err);
     }
   }
-};
+}
+
+export const handler = withMiddy(streamProcessorHandler, 'streamProcessor');
 
 function unmarshall(attr: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};

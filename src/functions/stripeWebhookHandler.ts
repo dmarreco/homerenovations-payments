@@ -1,12 +1,13 @@
-import type { APIGatewayProxyHandler } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import Stripe from 'stripe';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getPayment, settlePayment, failPayment } from '../domain/payments/payments';
 import { appendEvent } from '../domain/ledger/ledger';
+import { withMiddyHttp } from '../lib/middyMiddlewares';
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+async function stripeWebhookHandlerHandler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const config = getConfig();
   const signature = event.headers['Stripe-Signature'] ?? event.headers['stripe-signature'] ?? '';
   const payload = event.body ?? '';
@@ -135,4 +136,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     console.error('stripeWebhookHandler', err);
     return { statusCode: 500, body: '' };
   }
-};
+}
+
+export const handler = withMiddyHttp(stripeWebhookHandlerHandler, 'stripeWebhookHandler');

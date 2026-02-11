@@ -1,4 +1,4 @@
-import type { SQSHandler } from 'aws-lambda';
+import type { SQSEvent } from 'aws-lambda';
 import { getConfig } from '../lib/config';
 import { getPayment } from '../domain/payments/payments';
 import { getItem } from '../lib/dynamodb';
@@ -6,8 +6,9 @@ import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { initiatePayment } from '../domain/payments/payments';
 import { v4 as uuidv4 } from 'uuid';
+import { withMiddy } from '../lib/middyMiddlewares';
 
-export const handler: SQSHandler = async (event) => {
+async function retryPaymentHandler(event: SQSEvent): Promise<void> {
   const config = getConfig();
   if (!config.stripeServiceUrl) return;
   const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
@@ -59,4 +60,6 @@ export const handler: SQSHandler = async (event) => {
       throw err;
     }
   }
-};
+}
+
+export const handler = withMiddy(retryPaymentHandler, 'retryPayment');
