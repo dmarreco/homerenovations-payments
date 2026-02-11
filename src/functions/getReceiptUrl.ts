@@ -26,14 +26,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     ? payment.receiptUrl.replace(`s3://${config.filesBucketName}/`, '')
     : payment.receiptUrl;
   const s3 = new S3Client({});
+  const expiresIn = config.receiptUrlExpiresSec;
   const url = await getSignedUrl(
     s3,
     new GetObjectCommand({ Bucket: config.filesBucketName, Key: key }),
-    { expiresIn: 300 }
+    { expiresIn }
   );
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ receiptUrl: url, expiresIn: 300 }),
+    body: JSON.stringify({ receiptUrl: url, expiresIn }),
   };
 };

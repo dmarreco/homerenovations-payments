@@ -10,8 +10,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   }
   const from = event.queryStringParameters?.from;
   const to = event.queryStringParameters?.to;
-  const limit = Math.min(parseInt(event.queryStringParameters?.limit ?? '50', 10) || 50, 100);
   const config = getConfig();
+  const requestedLimit = parseInt(event.queryStringParameters?.limit ?? String(config.getHistoryDefaultLimit), 10) || config.getHistoryDefaultLimit;
+  const limit = Math.min(requestedLimit, config.getHistoryMaxLimit);
   try {
     const { items, lastEvaluatedKey } = await queryItems<PaymentRecord>(
       config.paymentsTableName,

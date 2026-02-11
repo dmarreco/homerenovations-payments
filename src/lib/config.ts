@@ -12,6 +12,13 @@ function requireEnv(key: string): string {
   return v;
 }
 
+function parseIntEnv(key: string, defaultValue: number): number {
+  const v = process.env[key];
+  if (v === undefined || v === '') return defaultValue;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? defaultValue : n;
+}
+
 export interface Config {
   stage: string;
   ledgerTableName: string;
@@ -26,6 +33,18 @@ export interface Config {
   stripeServiceUrl: string;
   stripeServiceApiKey: string;
   fromEmail: string;
+  // Configurable business/operational constants (env with defaults)
+  lateFeeGraceDays: number;
+  lateFeeAmountCents: number;
+  ledgerSnapshotInterval: number;
+  ledgerAppendMaxRetries: number;
+  defaultPaymentMaxRetries: number;
+  paymentRetryBaseDelaySec: number;
+  paymentRetryMaxDelaySec: number;
+  receiptUrlExpiresSec: number;
+  firehoseBatchSize: number;
+  getHistoryDefaultLimit: number;
+  getHistoryMaxLimit: number;
 }
 
 export function getConfig(): Config {
@@ -43,5 +62,16 @@ export function getConfig(): Config {
     stripeServiceUrl: getEnv('STRIPE_SERVICE_URL'),
     stripeServiceApiKey: getEnv('STRIPE_SERVICE_API_KEY'),
     fromEmail: getEnv('FROM_EMAIL', 'noreply@example.com'),
+    lateFeeGraceDays: parseIntEnv('LATE_FEE_GRACE_DAYS', 5),
+    lateFeeAmountCents: parseIntEnv('LATE_FEE_AMOUNT_CENTS', 75),
+    ledgerSnapshotInterval: parseIntEnv('LEDGER_SNAPSHOT_INTERVAL', 10),
+    ledgerAppendMaxRetries: parseIntEnv('LEDGER_APPEND_MAX_RETRIES', 5),
+    defaultPaymentMaxRetries: parseIntEnv('DEFAULT_PAYMENT_MAX_RETRIES', 3),
+    paymentRetryBaseDelaySec: parseIntEnv('PAYMENT_RETRY_BASE_DELAY_SEC', 300),
+    paymentRetryMaxDelaySec: parseIntEnv('PAYMENT_RETRY_MAX_DELAY_SEC', 900),
+    receiptUrlExpiresSec: parseIntEnv('RECEIPT_URL_EXPIRES_SEC', 300),
+    firehoseBatchSize: parseIntEnv('FIREHOSE_BATCH_SIZE', 500),
+    getHistoryDefaultLimit: parseIntEnv('GET_HISTORY_DEFAULT_LIMIT', 50),
+    getHistoryMaxLimit: parseIntEnv('GET_HISTORY_MAX_LIMIT', 100),
   };
 }

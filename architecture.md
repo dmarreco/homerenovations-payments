@@ -705,6 +705,10 @@ A single operational dashboard showing:
 
 This CloudWatch dashboard serves the engineering team. The QuickSight dashboard (powered by Athena) serves the finance team with deeper business analytics.
 
+### 10.4 Configurable Constants
+
+Grace period, late fee amount, and key operational constants are configurable via environment variables (with defaults), so each stage can tune behavior without code changes. See README "Environment (for deploy)" for the full list; examples: `LATE_FEE_GRACE_DAYS`, `LATE_FEE_AMOUNT_CENTS`, `DEFAULT_PAYMENT_MAX_RETRIES`, `PAYMENT_RETRY_BASE_DELAY_SEC`, `LEDGER_SNAPSHOT_INTERVAL`, `RECEIPT_URL_EXPIRES_SEC`, and history/firehose limits.
+
 ---
 
 ## 11. Reliability and Error Handling

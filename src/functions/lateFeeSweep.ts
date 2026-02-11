@@ -4,9 +4,6 @@ import { appendEvent, rebuildState } from '../domain/ledger/ledger';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
-const GRACE_DAYS = 5;
-const LATE_FEE_AMOUNT = 75;
-
 export const handler: ScheduledHandler = async () => {
   const config = getConfig();
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -36,7 +33,7 @@ export const handler: ScheduledHandler = async () => {
     if (state.balance <= 0) continue;
     const hasRentDue = charges.some((c) => {
       const due = new Date(c.dueDate);
-      due.setDate(due.getDate() + GRACE_DAYS);
+      due.setDate(due.getDate() + config.lateFeeGraceDays);
       return due.toISOString().slice(0, 10) < today;
     });
     if (hasRentDue) {
@@ -44,7 +41,7 @@ export const handler: ScheduledHandler = async () => {
         residentId,
         {
           eventType: 'LATE_FEE_APPLIED',
-          amount: LATE_FEE_AMOUNT,
+          amount: config.lateFeeAmountCents,
           chargeType: 'LATE_FEE',
           description: 'Late fee',
         },

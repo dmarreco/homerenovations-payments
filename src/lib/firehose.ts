@@ -17,14 +17,18 @@ export async function putRecord(event: DomainEvent, deliveryStreamName: string):
   );
 }
 
-export async function putRecords(events: DomainEvent[], deliveryStreamName: string): Promise<void> {
+export async function putRecords(
+  events: DomainEvent[],
+  deliveryStreamName: string,
+  batchSize: number = 500
+): Promise<void> {
   if (events.length === 0) return;
   const { PutRecordBatchCommand } = await import('@aws-sdk/client-firehose');
   const records = events.map((event) => ({
     Data: Buffer.from(JSON.stringify(event) + '\n', 'utf-8'),
   }));
-  for (let i = 0; i < records.length; i += 500) {
-    const chunk = records.slice(i, i + 500);
+  for (let i = 0; i < records.length; i += batchSize) {
+    const chunk = records.slice(i, i + batchSize);
     await client.send(
       new PutRecordBatchCommand({
         DeliveryStreamName: deliveryStreamName,

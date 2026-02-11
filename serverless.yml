@@ -10,19 +10,50 @@ provider:
   memorySize: 256
   timeout: 30
   environment:
+    # Deployment stage (dev, prod, etc.)
     STAGE: ${self:provider.stage}
+    # Base URL of the internal Stripe service Lambda (other Lambdas call this for Stripe operations)
     STRIPE_SERVICE_URL: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}/internal/stripe'
+    # API key required to call the Stripe service (optional; set for internal auth)
     STRIPE_SERVICE_API_KEY: ${env:STRIPE_SERVICE_API_KEY, 'internal-stripe-dev'}
+    # DynamoDB table names
     LEDGER_TABLE: ${self:custom.ledgerTableName}
     PAYMENTS_TABLE: ${self:custom.paymentsTableName}
     PAYMENT_METHODS_TABLE: ${self:custom.paymentMethodsTableName}
     AUTOPAY_TABLE: ${self:custom.autopayTableName}
+    # SQS queue URL for payment retry messages (failed payments are re-queued here)
     PAYMENT_RETRY_QUEUE_URL: !Ref PaymentRetryQueue
     DISPUTES_TABLE: ${self:custom.disputesTableName}
+    # EventBridge bus for domain events (notifications, receipt generation)
     EVENT_BUS_NAME: ${self:custom.eventBusName}
+    # Kinesis Firehose stream for analytics event pipeline
     FIREHOSE_STREAM_NAME: ${self:custom.firehoseStreamName}
+    # S3 bucket for receipt PDFs and other files
     FILES_BUCKET: ${self:custom.filesBucketName}
+    # S3 bucket for the events data lake (Firehose destination)
     EVENTS_LAKE_BUCKET: ${self:custom.eventsLakeBucketName}
+    # Days after charge due date before a late fee is applied (default: 5)
+    LATE_FEE_GRACE_DAYS: ${env:LATE_FEE_GRACE_DAYS, '5'}
+    # Late fee amount in cents, flat (default: 75)
+    LATE_FEE_AMOUNT_CENTS: ${env:LATE_FEE_AMOUNT_CENTS, '75'}
+    # Write a ledger snapshot every N events for faster rebuilds (default: 10)
+    LEDGER_SNAPSHOT_INTERVAL: ${env:LEDGER_SNAPSHOT_INTERVAL, '10'}
+    # Max optimistic-lock retries when appending to the ledger (default: 5)
+    LEDGER_APPEND_MAX_RETRIES: ${env:LEDGER_APPEND_MAX_RETRIES, '5'}
+    # Default number of retry attempts for failed payments (default: 3)
+    DEFAULT_PAYMENT_MAX_RETRIES: ${env:DEFAULT_PAYMENT_MAX_RETRIES, '3'}
+    # Base delay in seconds for payment retry backoff (default: 300)
+    PAYMENT_RETRY_BASE_DELAY_SEC: ${env:PAYMENT_RETRY_BASE_DELAY_SEC, '300'}
+    # Max delay in seconds for payment retry backoff (default: 900)
+    PAYMENT_RETRY_MAX_DELAY_SEC: ${env:PAYMENT_RETRY_MAX_DELAY_SEC, '900'}
+    # Presigned receipt URL expiry in seconds (default: 300)
+    RECEIPT_URL_EXPIRES_SEC: ${env:RECEIPT_URL_EXPIRES_SEC, '300'}
+    # Batch size for Firehose putRecords (default: 500)
+    FIREHOSE_BATCH_SIZE: ${env:FIREHOSE_BATCH_SIZE, '500'}
+    # Default page size for GET payment history (default: 50)
+    GET_HISTORY_DEFAULT_LIMIT: ${env:GET_HISTORY_DEFAULT_LIMIT, '50'}
+    # Max page size for GET payment history (default: 100)
+    GET_HISTORY_MAX_LIMIT: ${env:GET_HISTORY_MAX_LIMIT, '100'}
   iam:
     role:
       statements:

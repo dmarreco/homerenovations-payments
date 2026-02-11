@@ -23,6 +23,21 @@ Stripe access is centralized in the **stripeService** Lambda. Only that Lambda n
 The framework sets `STRIPE_SERVICE_URL` (and optionally `STRIPE_SERVICE_API_KEY`) for all Lambdas so they can call the stripeService over HTTP. No other Lambda needs Stripe keys.
 
 - `FROM_EMAIL` – Verified SES sender address (for all Lambdas that send email)
+
+Optional (env vars with defaults; override per stage as needed):
+
+- `LATE_FEE_GRACE_DAYS` – Days after charge due date before late fee is applied (default: 5)
+- `LATE_FEE_AMOUNT_CENTS` – Late fee amount in cents (default: 75)
+- `LEDGER_SNAPSHOT_INTERVAL` – Write a ledger snapshot every N events (default: 10)
+- `LEDGER_APPEND_MAX_RETRIES` – Optimistic-lock retries for ledger append (default: 5)
+- `DEFAULT_PAYMENT_MAX_RETRIES` – Default retry attempts for failed payments (default: 3)
+- `PAYMENT_RETRY_BASE_DELAY_SEC` – Base delay in seconds for first retry (default: 300)
+- `PAYMENT_RETRY_MAX_DELAY_SEC` – Max delay in seconds for retry backoff (default: 900)
+- `RECEIPT_URL_EXPIRES_SEC` – Presigned receipt URL expiry in seconds (default: 300)
+- `FIREHOSE_BATCH_SIZE` – Batch size for Firehose putRecords (default: 500)
+- `GET_HISTORY_DEFAULT_LIMIT` – Default page size for payment history (default: 50)
+- `GET_HISTORY_MAX_LIMIT` – Max page size for payment history (default: 100)
+
 ## Deploy
 
 ```bash

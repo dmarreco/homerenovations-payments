@@ -68,10 +68,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const declineMessage = (pi as any).last_payment_error?.message ?? 'Payment failed';
         const { retryCount } = await failPayment(paymentId, declineMessage, paymentsConfig);
         const payment = await getPayment(paymentId, paymentsConfig);
-        const maxRetries = payment?.maxRetries ?? 3;
+        const maxRetries = payment?.maxRetries ?? config.defaultPaymentMaxRetries;
         if (config.paymentRetryQueueUrl && retryCount < maxRetries) {
           const sqs = new SQSClient({});
-          const delaySec = Math.min(900, retryCount * 300);
+          const delaySec = Math.min(config.paymentRetryMaxDelaySec, retryCount * config.paymentRetryBaseDelaySec);
           await sqs.send(
             new SendMessageCommand({
               QueueUrl: config.paymentRetryQueueUrl,

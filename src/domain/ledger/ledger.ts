@@ -5,13 +5,11 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { LedgerEventRecord, LedgerSnapshotRecord, LedgerRecord, OutstandingLedgerItem } from '../../types/tables';
 import { ledgerPk, ledgerSk } from '../../types/tables';
+import { getConfig } from '../../lib/config';
 import { createSnapshotRecord } from './events';
-
-const SNAPSHOT_INTERVAL = 10;
-const MAX_RETRIES = 5;
 
 export interface LedgerState {
   balance: number;
@@ -64,6 +62,7 @@ export async function getVersion(residentId: string, config: LedgerConfig): Prom
 export async function rebuildState(residentId: string, config: LedgerConfig): Promise<LedgerState> {
   const client = getClient(config);
   const pk = ledgerPk(residentId);
+  const snapshotInterval = getConfig().ledgerSnapshotInterval;
   // Fetch last N items (guaranteed to include at least one snapshot)
   const result = await client.send(
     new QueryCommand({
@@ -71,7 +70,7 @@ export async function rebuildState(residentId: string, config: LedgerConfig): Pr
       KeyConditionExpression: 'PK = :pk',
       ExpressionAttributeValues: { ':pk': pk },
       ScanIndexForward: false,
-      Limit: SNAPSHOT_INTERVAL + 1,
+      Limit: snapshotInterval + 1,
     })
   );
   const items = (result.Items ?? []) as LedgerRecord[];
@@ -139,8 +138,11 @@ export async function appendEvent(
 ): Promise<{ version: number }> {
   const client = getClient(config);
   const pk = ledgerPk(residentId);
+  const appConfig = getConfig();
+  const maxRetries = appConfig.ledgerAppendMaxRetries;
+  const snapshotInterval = appConfig.ledgerSnapshotInterval;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     const currentVersion = await getVersion(residentId, config);
     const nextVersion = currentVersion + 1;
     const sk = ledgerSk(nextVersion);
@@ -169,8 +171,8 @@ export async function appendEvent(
       throw err;
     }
 
-    // Snapshot every SNAPSHOT_INTERVAL events
-    if (nextVersion % SNAPSHOT_INTERVAL === 0) {
+    // Snapshot every snapshotInterval events
+    if (nextVersion % snapshotInterval === 0) {
       const state = await rebuildState(residentId, config);
       const snapshot = createSnapshotRecord(residentId, nextVersion, state.balance, state.outstandingItems);
       await client.send(

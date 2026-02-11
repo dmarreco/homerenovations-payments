@@ -51,6 +51,7 @@ export const handler: ScheduledHandler = async () => {
           paymentMethodId: enrollment.paymentMethodId,
           paymentMethodType: methodRecord.type as 'ACH' | 'CARD' | 'WALLET',
           stripePaymentIntentId: intent.paymentIntentId,
+          maxRetries: config.defaultPaymentMaxRetries,
         },
         { tableName: config.paymentsTableName }
       );

@@ -71,6 +71,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         paymentMethodId: body.paymentMethodId,
         paymentMethodType: methodRecord.type as 'ACH' | 'CARD' | 'WALLET',
         stripePaymentIntentId: intent.paymentIntentId,
+        maxRetries: config.defaultPaymentMaxRetries,
       },
       { tableName: config.paymentsTableName }
     );

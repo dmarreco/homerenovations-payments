@@ -32,6 +32,7 @@ describe('makePayment', () => {
     ledgerTableName: 'Ledger',
     paymentMethodsTableName: 'Methods',
     paymentsTableName: 'Payments',
+    defaultPaymentMaxRetries: 3,
   };
 
   beforeEach(() => {
