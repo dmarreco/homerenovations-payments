@@ -65,4 +65,8 @@ Integration test (ledger round-trip) runs only when `DDB_TABLE_LEDGER` is set (e
 
 ## Architecture
 
-See `tmp-prompts/SFR3/architecture.md` in the parent repo for full design (event-sourced ledger, flows, analytics pipeline).
+See [`architecture.md`](./architecture.md) for full design (event-sourced ledger, flows, analytics pipeline).
+
+## Product Backlog
+
+See [`product-backlog.md`](./product-backlog.md) for the product roadmap and feature backlog.
