@@ -5,6 +5,7 @@ import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem } from '../lib/dynamodb';
 import { paymentMethodPk, paymentMethodSk } from '../types/tables';
 import { initiatePayment } from '../domain/payments/payments';
+import { rebuildState } from '../domain/ledger/ledger';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   const residentId = event.pathParameters?.residentId;
@@ -24,6 +25,20 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   if (!config.stripeServiceUrl) {
     return { statusCode: 503, body: JSON.stringify({ error: 'Stripe service not configured' }) };
   }
+  const state = await rebuildState(residentId, { tableName: config.ledgerTableName });
+  if (state.balance <= 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'No balance due' }),
+    };
+  }
+  const amount = Math.round(body.amount);
+  if (amount > state.balance) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Amount exceeds current balance', balance: state.balance }),
+    };
+  }
   const methodRecord = await getItem<{ stripePaymentMethodId: string; type: string }>(
     config.paymentMethodsTableName,
     { PK: paymentMethodPk(residentId), SK: paymentMethodSk(body.paymentMethodId) }
@@ -33,7 +48,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   }
   const paymentId = uuidv4();
   const currency = (body.currency ?? 'usd').toLowerCase();
-  const amount = Math.round(body.amount);
   try {
     const stripe = createStripeServiceClient(config.stripeServiceUrl, config.stripeServiceApiKey);
     const customerRecord = await getItem<{ stripeCustomerId: string }>(
@@ -68,6 +82,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         reference: intent.paymentIntentId,
         status: intent.status,
         clientSecret: intent.clientSecret,
+        currentBalance: state.balance,
+        balanceAfterPayment: state.balance - amount,
       }),
     };
   } catch (err: unknown) {

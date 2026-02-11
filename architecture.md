@@ -424,22 +424,25 @@ This schema flows into both EventBridge (for routing rules) and Firehose/S3 (for
 
 ```
 Resident -> API GW -> makePayment Lambda
-  1. Validate payment method exists in Methods table
-  2. Call stripeService (HTTP POST) to create payment intent
-  3. Write to Payments table: status = PENDING, stripePaymentIntentId = pi_xxx
-  4. Return confirmation with paymentId to resident
+  1. Rebuild ledger state; if balance <= 0 return 400 "No balance due"; if amount > balance return 400 "Amount exceeds current balance" with balance (partial payments supported: amount must be <= current balance)
+  2. Validate payment method exists in Methods table
+  3. Call stripeService (HTTP POST) to create payment intent
+  4. Write to Payments table: status = PENDING, stripePaymentIntentId = pi_xxx
+  5. Return 202 with paymentId, currentBalance, balanceAfterPayment
 
   ... Stripe processes asynchronously ...
 
-  5. Stripe fires payment_intent.succeeded webhook -> API GW -> stripeWebhookHandler
-  6. Verify Stripe signature (via stripeService)
-  7. Update Payments table: status = SETTLED
-  8. Append PAYMENT_APPLIED event to Ledger table (+ snapshot if due)
-  9. DynamoDB Stream -> streamProcessor -> EventBridge
- 10. EventBridge rules trigger:
+  6. Stripe fires payment_intent.succeeded webhook -> API GW -> stripeWebhookHandler
+  7. Verify Stripe signature (via stripeService)
+  8. Update Payments table: status = SETTLED
+  9. Append PAYMENT_APPLIED event to Ledger table (+ snapshot if due)
+ 10. DynamoDB Stream -> streamProcessor -> EventBridge
+ 11. EventBridge rules trigger:
      - sendNotification: email confirmation to resident
      - generateReceipt: PDF stored in S3
 ```
+
+Partial payments are supported: the resident may send any amount (cents) not exceeding the current balance; amount is validated before creating the payment intent (no overpayment by default).
 
 ### 7.2 Post a Charge (Story 4)
 
