@@ -558,7 +558,7 @@ Route: `POST /residents/{residentId}/payments/{paymentId}/refund`. Optional body
 
 ### 8.1 Dedicated Stripe Service
 
-Stripe access is centralized in a single **stripeService** Lambda. No other Lambda holds Stripe credentials or talks to the Stripe API directly. Other Lambdas call the Stripe service over **HTTP** (POST to `/internal/stripe` with body `{ action, params }`). The stripeService Lambda is exposed via API Gateway and is the only component that uses the Stripe SDK (via the Stripe adapter). Credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are scoped to this Lambda's environment (e.g. from SSM). A **stripeServiceClient** implements the same `PaymentProviderPort` interface by calling the stripeService HTTP endpoint, so business logic remains unchanged.
+Stripe access is centralized in a single **stripeService** Lambda. No other Lambda holds Stripe credentials or talks to the Stripe API directly. Other Lambdas call the Stripe service over **HTTP** (POST to `/internal/stripe` with body `{ action, params }`). The stripeService Lambda is exposed via API Gateway and is the only component that uses the Stripe SDK (via the Stripe adapter). Credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are scoped to this Lambda's environment (e.g. from SSM). A **stripeServiceClient** implements the same `PaymentProviderPort` interface by calling the stripeService HTTP endpoint, so business logic remains unchanged. For e2e or integration tests without Stripe, set `STRIPE_MOCK=true` on the stripeService Lambda; it will then return mocked responses and log calls instead of calling the Stripe API.
 
 ### 8.2 Stripe Adapter (inside stripeService only)
 

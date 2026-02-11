@@ -202,6 +202,7 @@ functions:
       STRIPE_SECRET_KEY: ${ssm:/sfr3/${self:provider.stage}/STRIPE_SECRET_KEY~true}
       STRIPE_WEBHOOK_SECRET: ${ssm:/sfr3/${self:provider.stage}/STRIPE_WEBHOOK_SECRET~true}
       STRIPE_SERVICE_API_KEY: ${env:STRIPE_SERVICE_API_KEY, 'internal-stripe-dev'}
+      STRIPE_MOCK: ${env:STRIPE_MOCK, 'false'}
 
   # Story 4 - Post Charges
   postCharge:

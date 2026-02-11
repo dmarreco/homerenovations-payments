@@ -38,6 +38,11 @@ Optional (env vars with defaults; override per stage as needed):
 - `GET_HISTORY_DEFAULT_LIMIT` – Default page size for payment history (default: 50)
 - `GET_HISTORY_MAX_LIMIT` – Max page size for payment history (default: 100)
 - `LOG_LEVEL` – Logging level: `info` (default) logs only static entry/exit messages; `trace` also logs full event and response payloads. Set to `trace` for debugging; leave `info` in production to avoid PII and noise.
+- `STRIPE_MOCK` – Set to `true` or `1` on the **stripeService** Lambda only to return mocked Stripe responses (with logging) and skip all real Stripe API calls. Use for e2e or integration tests so no Stripe keys or webhook are required. Deploy with `STRIPE_MOCK=true` for a test stage, or set in the function’s environment.
+
+## E2E / testing without Stripe
+
+To run end-to-end or integration tests without hitting Stripe, set `STRIPE_MOCK=true` when deploying (e.g. `STRIPE_MOCK=true npm run deploy:dev`) or configure it in the stripeService function’s environment. The stripeService will then return deterministic mock responses and log each call; no Stripe secret key or webhook secret is required.
 
 ## Observability (Lambda middleware)
 
