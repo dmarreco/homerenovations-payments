@@ -7,8 +7,6 @@ Serverless payment system for SFR3 rent collection (Stripe, DynamoDB, EventBridg
 - Node.js 20+
 - AWS CLI configured
 - Stripe account (test mode for dev)
-- Optional: Plaid account for ACH
-
 ## Setup
 
 ```bash
@@ -22,8 +20,6 @@ Set before `serverless deploy` or in AWS Parameter Store (e.g. `/sfr3/dev/STRIPE
 - `STRIPE_SECRET_KEY` – Stripe secret key (test for dev)
 - `STRIPE_WEBHOOK_SECRET` – From Stripe Dashboard > Webhooks (after creating endpoint)
 - `FROM_EMAIL` – Verified SES sender address
-- Optional: `PLAID_CLIENT_ID`, `PLAID_SECRET` for ACH
-
 ## Deploy
 
 ```bash
@@ -58,7 +54,7 @@ Integration test (ledger round-trip) runs only when `DDB_TABLE_LEDGER` is set (e
 - `src/functions/` – Lambda handlers
 - `src/domain/` – Ledger (event sourcing), payments
 - `src/ports/` – Interfaces (payment provider, notification)
-- `src/adapters/` – Stripe, Plaid, SES
+- `src/adapters/` – Stripe, SES
 - `src/lib/` – DynamoDB, EventBridge, Firehose, config
 - `src/types/` – Tables, domain events
 - `tests/` – Unit and integration tests

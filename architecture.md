@@ -70,7 +70,6 @@ SFR3 needs a centralized payment system that:
 | Notifications | Amazon SES | Transactional emails to residents |
 | File Storage | Amazon S3 | Payment receipts (PDF), reconciliation reports |
 | Payment Provider | Stripe | Payment processing, tokenization, chargeback lifecycle |
-| Bank Verification | Plaid | ACH bank account verification and linking |
 | Monitoring | CloudWatch Metrics + Alarms | Operational alerts, custom payment metrics |
 
 ---
@@ -127,7 +126,6 @@ flowchart TB
 
     subgraph external [External Services]
         Stripe[Stripe API]
-        Plaid[Plaid API]
         SES[Amazon SES]
         Athena[Amazon Athena]
         QS[Amazon QuickSight]
@@ -147,7 +145,6 @@ flowchart TB
 
     PaymentMethodFn --> MethodsTbl
     PaymentMethodFn --> Stripe
-    PaymentMethodFn --> Plaid
     MakePaymentFn --> Stripe
     MakePaymentFn --> PaymentsTbl
     LedgerWriteFn --> LedgerTbl
@@ -360,7 +357,7 @@ The snapshot write is a separate DynamoDB put that is idempotent (same version, 
 
 | Function | Trigger | Responsibility |
 |---|---|---|
-| `enrollPaymentMethod` | API Gateway | Link bank account (via Plaid) or card (via Stripe), store token |
+| `enrollPaymentMethod` | API Gateway | Link bank account or card via Stripe, store token |
 | `makePayment` | API Gateway | Initiate a one-time payment via Stripe, write to Payments table |
 | `postCharge` | API Gateway | Append a `CHARGE_POSTED` event to the Ledger table |
 | `applyPayment` | Internal (webhook flow) | Append a `PAYMENT_APPLIED` event to the Ledger table |
@@ -557,16 +554,9 @@ export class StripeAdapter implements PaymentProviderPort {
 }
 ```
 
-### 8.2 Plaid Integration
+### 8.2 ACH via Stripe
 
-Used exclusively for ACH bank account verification during payment method enrollment:
-
-1. Resident initiates bank link -> frontend opens Plaid Link
-2. Plaid returns a `public_token` to the frontend
-3. Frontend sends `public_token` to `enrollPaymentMethod` Lambda
-4. Lambda exchanges `public_token` for `access_token` via Plaid API
-5. Lambda retrieves bank account details and creates a Stripe bank account token
-6. Token stored in Payment Methods table
+ACH bank account enrollment is handled via **Stripe ACH Direct Debit** (and Stripe Financial Connections where applicable). No separate bank-verification provider is used; the system is Stripe-only for payment methods.
 
 ### 8.3 Webhook Security
 
@@ -766,7 +756,7 @@ Infrastructure built:
 - Firehose + S3 data lake + Athena + QuickSight
 - SES notifications
 - S3 receipts
-- Stripe + Plaid integration
+- Stripe integration
 - CloudWatch metrics, alarms, and dashboard
 
 ### Release 2 -- Automation
@@ -838,7 +828,6 @@ sfr3-payments/
 
     adapters/                     # External service implementations
       stripeAdapter.ts
-      plaidAdapter.ts
       sesAdapter.ts
 
     lib/                          # Shared utilities

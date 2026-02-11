@@ -25,8 +25,6 @@ export interface Config {
   filesBucketName: string;
   stripeSecretKey: string;
   stripeWebhookSecret: string;
-  plaidClientId: string;
-  plaidSecret: string;
   fromEmail: string;
 }
 
@@ -44,8 +42,6 @@ export function getConfig(): Config {
     filesBucketName: getEnv('FILES_BUCKET'),
     stripeSecretKey: getEnv('STRIPE_SECRET_KEY'),
     stripeWebhookSecret: getEnv('STRIPE_WEBHOOK_SECRET'),
-    plaidClientId: getEnv('PLAID_CLIENT_ID'),
-    plaidSecret: getEnv('PLAID_SECRET'),
     fromEmail: getEnv('FROM_EMAIL', 'noreply@example.com'),
   };
 }

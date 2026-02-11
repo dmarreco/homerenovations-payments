@@ -23,7 +23,7 @@
 **so that** I can use it to make payments toward my lease obligations.
 
 **Acceptance Criteria:**
-- Resident can add an ACH bank account via Plaid-linked verification.
+- Resident can add an ACH bank account via Stripe ACH Direct Debit.
 - Resident can add a credit or debit card.
 - Payment method details are tokenized and never stored in plaintext.
 - Resident can remove or replace a previously linked payment method.
