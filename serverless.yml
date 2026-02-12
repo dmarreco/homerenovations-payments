@@ -167,6 +167,7 @@ custom:
 functions:
   # Story 1 - Enroll Payment Method
   enrollPaymentMethod:
+    description: Register card/ACH with Stripe and store in Payment Methods table
     handler: src/functions/enrollPaymentMethod.handler
     events:
       - http:
@@ -174,6 +175,7 @@ functions:
           method: post
           cors: true
   deletePaymentMethod:
+    description: Remove a saved payment method for a resident
     handler: src/functions/deletePaymentMethod.handler
     events:
       - http:
@@ -183,6 +185,7 @@ functions:
 
   # Story 2 - Make a One-Time Payment
   makePayment:
+    description: Initiate one-time payment via Stripe, write PENDING to Payments table
     handler: src/functions/makePayment.handler
     events:
       - http:
@@ -190,6 +193,7 @@ functions:
           method: post
           cors: true
   stripeWebhookHandler:
+    description: Verify Stripe webhook, update payment status, append to Ledger, publish events
     handler: src/functions/stripeWebhookHandler.handler
     events:
       - http:
@@ -197,6 +201,7 @@ functions:
           method: post
 
   stripeService:
+    description: Single entry point for Stripe API (POST /internal/stripe); supports STRIPE_MOCK
     handler: src/functions/stripeService.handler
     events:
       - http:
@@ -211,6 +216,7 @@ functions:
 
   # Story 4 - Post Charges
   postCharge:
+    description: Append CHARGE_POSTED event to Ledger for a resident
     handler: src/functions/postCharge.handler
     events:
       - http:
@@ -218,6 +224,7 @@ functions:
           method: post
           cors: true
   getBalance:
+    description: Rebuild current balance from Ledger snapshot + events
     handler: src/functions/getBalance.handler
     events:
       - http:
@@ -227,6 +234,7 @@ functions:
 
   # Story 9 - Payment History and Receipts
   getHistory:
+    description: Return resident payment history from Payments table (paginated)
     handler: src/functions/getHistory.handler
     events:
       - http:
@@ -234,6 +242,7 @@ functions:
           method: get
           cors: true
   getReceiptUrl:
+    description: Return presigned S3 URL for payment receipt PDF
     handler: src/functions/getReceiptUrl.handler
     events:
       - http:
@@ -241,6 +250,7 @@ functions:
           method: get
           cors: true
   refundPayment:
+    description: Refund settled payment via Stripe, append REFUND_APPLIED to Ledger
     handler: src/functions/refundPayment.handler
     events:
       - http:
@@ -248,6 +258,7 @@ functions:
           method: post
           cors: true
   generateReceipt:
+    description: On payment.settled: generate PDF receipt and store in S3
     handler: src/functions/generateReceipt.handler
     events:
       - eventBridge:
@@ -260,6 +271,7 @@ functions:
 
   # Story 10 - Event Pipeline
   streamProcessor:
+    description: Ledger/Payments stream → domain events → EventBridge + Firehose
     handler: src/functions/streamProcessor.handler
     events:
       - stream:
@@ -273,6 +285,7 @@ functions:
           batchSize: 10
           startingPosition: LATEST
   sendNotification:
+    description: On payment/charge events: send transactional email via SES
     handler: src/functions/sendNotification.handler
     events:
       - eventBridge:
@@ -289,6 +302,7 @@ functions:
 
   # Release 2 - Automation
   enrollAutopay:
+    description: Enroll resident in autopay (payment method + charge day 1–28)
     handler: src/functions/enrollAutopay.handler
     events:
       - http:
@@ -296,6 +310,7 @@ functions:
           method: post
           cors: true
   cancelAutopay:
+    description: Remove resident autopay enrollment
     handler: src/functions/cancelAutopay.handler
     events:
       - http:
@@ -303,14 +318,17 @@ functions:
           method: delete
           cors: true
   autopaySweep:
+    description: Daily: charge residents with autopay due today (balance > 0)
     handler: src/functions/autopaySweep.handler
     events:
       - schedule: cron(0 11 * * ? *)  # 6am UTC = 11pm/6am depending on region
   lateFeeSweep:
+    description: Daily: post LATE_FEE_APPLIED for overdue balances past grace period
     handler: src/functions/lateFeeSweep.handler
     events:
       - schedule: cron(0 4 * * ? *)   # 11pm UTC = 4am/11pm depending on region
   retryPayment:
+    description: SQS: re-attempt failed payment via Stripe with backoff
     handler: src/functions/retryPayment.handler
     events:
       - sqs:
@@ -319,6 +337,7 @@ functions:
 
   # Release 3 - Financial Ops
   handleDispute:
+    description: Attach evidence and submit dispute to Stripe
     handler: src/functions/handleDispute.handler
     events:
       - http:
@@ -326,6 +345,7 @@ functions:
           method: put
           cors: true
   dailyReconciliation:
+    description: Daily: match Stripe balance transactions to internal records, flag mismatches
     handler: src/functions/dailyReconciliation.handler
     events:
       - schedule: cron(0 7 * * ? *)  # 2am UTC
