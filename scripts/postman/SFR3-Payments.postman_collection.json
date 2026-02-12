@@ -1,0 +1,160 @@
+{
+  "info": {
+    "name": "SFR3 Payments API",
+    "description": "SFR3 rent collection API – residents, charges, payments, autopay, disputes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://0z74f8i7oj.execute-api.us-east-1.amazonaws.com/dev" },
+    { "key": "residentId", "value": "resident-demo-001" },
+    { "key": "methodId", "value": "" },
+    { "key": "paymentId", "value": "" },
+    { "key": "disputeId", "value": "dp_placeholder" }
+  ],
+  "item": [
+    {
+      "name": "Resident & balance",
+      "item": [
+        {
+          "name": "Get balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/residents/{{residentId}}/balance",
+            "description": "Current balance and outstanding items for the resident."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment methods",
+      "item": [
+        {
+          "name": "Enroll payment method",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"card\",\n  \"paymentMethodId\": \"pm_card_visa\"\n}"
+            },
+            "url": "{{baseUrl}}/residents/{{residentId}}/payment-methods",
+            "description": "Add a card. With STRIPE_MOCK=true any paymentMethodId works. Copy methodId from response into collection variable methodId for Make payment."
+          }
+        },
+        {
+          "name": "Delete payment method",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/residents/{{residentId}}/payment-methods/{{methodId}}",
+            "description": "Remove a saved payment method."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Charges",
+      "item": [
+        {
+          "name": "Post charge",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2100,\n  \"chargeType\": \"RENT\",\n  \"description\": \"February rent\"\n}"
+            },
+            "url": "{{baseUrl}}/residents/{{residentId}}/charges",
+            "description": "Post a charge (cents). chargeType: RENT | DEPOSIT | UTILITY | LATE_FEE | OTHER."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Make payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2100,\n  \"paymentMethodId\": \"{{methodId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/residents/{{residentId}}/payments",
+            "description": "Pay (partial or full). Copy paymentId from response for Refund. 202 = accepted; balance updates after webhook (or immediately in mock)."
+          }
+        },
+        {
+          "name": "Get payment history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/residents/{{residentId}}/payments",
+            "description": "Paginated list of payments for the resident."
+          }
+        },
+        {
+          "name": "Refund payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/residents/{{residentId}}/payments/{{paymentId}}/refund",
+            "description": "Full refund. For partial: { \"amount\": 500 }. Payment must be SETTLED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Autopay",
+      "item": [
+        {
+          "name": "Enroll autopay",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethodId\": \"{{methodId}}\",\n  \"chargeDay\": 15\n}"
+            },
+            "url": "{{baseUrl}}/residents/{{residentId}}/autopay",
+            "description": "Charge day 1–28 of the month."
+          }
+        },
+        {
+          "name": "Cancel autopay",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/residents/{{residentId}}/autopay",
+            "description": "Turn off autopay for this resident."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disputes",
+      "item": [
+        {
+          "name": "Submit dispute evidence",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"evidenceUrl\": \"https://example.com/receipt.pdf\",\n  \"submit\": true\n}"
+            },
+            "url": "{{baseUrl}}/disputes/{{disputeId}}/evidence",
+            "description": "Attach evidence and/or submit to Stripe. Requires an existing disputeId."
+          }
+        }
+      ]
+    }
+  ]
+}

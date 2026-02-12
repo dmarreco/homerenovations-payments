@@ -120,6 +120,8 @@ E2E_BASE_URL=https://<ApiEndpoint>/dev npm run e2e
 
 The script enrolls a payment method, posts a charge, gets balance, makes a payment, and gets history; it asserts HTTP status codes and response fields.
 
+**Postman:** Import `scripts/postman/SFR3-Payments.postman_collection.json` for a ready-made request set (balance, payment methods, charges, payments, autopay, disputes). Set collection variables `baseUrl` (e.g. `https://<ApiEndpoint>/dev`) and `residentId`; copy `methodId` and `paymentId` from responses when demoing the flow.
+
 **Manual steps:**
 
 1. Get the API base URL from deploy output: `ApiEndpoint`.
