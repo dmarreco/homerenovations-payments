@@ -109,6 +109,19 @@ Deploy creates: API Gateway, Lambdas, DynamoDB (Ledger, Payments, Payment Method
 
 ## End-to-end verification (Stripe test mode)
 
+**Script:** After deploy, run the E2E curl script (requires `jq`):
+
+```bash
+npm run e2e
+# Or with a custom base URL:
+E2E_BASE_URL=https://<ApiEndpoint>/dev npm run e2e
+# Or: ./scripts/e2e-curl.sh https://<ApiEndpoint>/dev
+```
+
+The script enrolls a payment method, posts a charge, gets balance, makes a payment, and gets history; it asserts HTTP status codes and response fields.
+
+**Manual steps:**
+
 1. Get the API base URL from deploy output: `ApiEndpoint`.
 2. **Enroll payment method** (card): use Stripe test token `pm_card_visa` or Stripe Elements on frontend; POST `/residents/{residentId}/payment-methods` with `{ "type": "card", "paymentMethodId": "pm_xxx" }`.
 3. **Post a charge**: POST `/residents/{residentId}/charges` with `{ "amount": 2100, "chargeType": "RENT", "description": "Rent" }`.

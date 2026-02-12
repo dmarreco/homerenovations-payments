@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "deploy": "serverless deploy",
     "deploy:dev": "serverless deploy --stage dev",
-    "remove": "serverless remove"
+    "remove": "serverless remove",
+    "e2e": "./scripts/e2e-curl.sh"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
