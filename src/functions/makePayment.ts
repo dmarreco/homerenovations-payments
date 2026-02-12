@@ -1,5 +1,6 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { getConfig } from '../lib/config';
 import { createStripeServiceClient } from '../adapters/stripeServiceClient';
 import { getItem } from '../lib/dynamodb';
@@ -76,6 +77,38 @@ async function makePaymentHandler(event: APIGatewayProxyEvent): Promise<APIGatew
       },
       { tableName: config.paymentsTableName }
     );
+
+    // When STRIPE_MOCK=true, fire a fake webhook so Ledger gets PAYMENT_APPLIED (e2e demo)
+    const stripeMock = process.env.STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK === '1';
+    const webhookHandlerName = process.env.STRIPE_WEBHOOK_HANDLER_NAME;
+    if (stripeMock && webhookHandlerName) {
+      const fakeStripeEvent = {
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: intent.paymentIntentId,
+            metadata: { paymentId, residentId },
+          },
+        },
+      };
+      const webhookPayload = {
+        body: JSON.stringify(fakeStripeEvent),
+        headers: { 'Stripe-Signature': 'mock', 'stripe-signature': 'mock' },
+      };
+      try {
+        const lambda = new LambdaClient({});
+        await lambda.send(
+          new InvokeCommand({
+            FunctionName: webhookHandlerName,
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify(webhookPayload),
+          })
+        );
+      } catch (err) {
+        console.error('makePayment: mock webhook invoke failed', err);
+      }
+    }
+
     return {
       statusCode: 202,
       headers: { 'Content-Type': 'application/json' },

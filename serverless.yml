@@ -60,6 +60,9 @@ provider:
     GET_HISTORY_MAX_LIMIT: ${env:GET_HISTORY_MAX_LIMIT, '100'}
     # info = static entry/exit messages only; trace = also log full event/response (set LOG_LEVEL=trace for debug)
     LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+    # When STRIPE_MOCK=true, makePayment invokes stripeWebhookHandler with a fake event so Ledger gets PAYMENT_APPLIED (e2e demo)
+    STRIPE_MOCK: ${env:STRIPE_MOCK, 'false'}
+    STRIPE_WEBHOOK_HANDLER_NAME: ${self:service}-${self:provider.stage}-stripeWebhookHandler
   iam:
     role:
       statements:
@@ -137,6 +140,10 @@ provider:
           Resource:
             - !GetAtt PaymentRetryQueue.Arn
             - !GetAtt PaymentRetryDlq.Arn
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+          Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-stripeWebhookHandler'
 plugins:
   - serverless-esbuild
 
