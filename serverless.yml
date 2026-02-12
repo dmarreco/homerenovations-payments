@@ -2,6 +2,10 @@ service: sfr3-payments
 
 frameworkVersion: '4'
 
+# Use serverless-esbuild plugin instead of Framework v4 built-in esbuild
+build:
+  esbuild: false
+
 provider:
   name: aws
   runtime: nodejs20.x
@@ -153,8 +157,8 @@ custom:
   paymentMethodsTableName: ${self:service}-${self:provider.stage}-payment-methods
   eventBusName: sfr3-payments-${self:provider.stage}
   firehoseStreamName: sfr3-events-${self:provider.stage}
-  filesBucketName: ${self:service}-${self:provider.stage}-files-${AWS::AccountId}
-  eventsLakeBucketName: ${self:service}-${self:provider.stage}-events-lake-${AWS::AccountId}
+  filesBucketName: ${self:service}-${self:provider.stage}-files-${aws:accountId}
+  eventsLakeBucketName: ${self:service}-${self:provider.stage}-events-lake-${aws:accountId}
   autopayTableName: ${self:service}-${self:provider.stage}-autopay
   paymentRetryQueueName: ${self:service}-${self:provider.stage}-payment-retry
   paymentRetryDlqName: ${self:service}-${self:provider.stage}-payment-retry-dlq
@@ -199,8 +203,9 @@ functions:
           path: internal/stripe
           method: post
     environment:
-      STRIPE_SECRET_KEY: ${ssm:/sfr3/${self:provider.stage}/STRIPE_SECRET_KEY~true}
-      STRIPE_WEBHOOK_SECRET: ${ssm:/sfr3/${self:provider.stage}/STRIPE_WEBHOOK_SECRET~true}
+      # Stripe secrets: set env vars before deploy for real Stripe, or use STRIPE_MOCK=true (no secrets needed)
+      STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY, ''}
+      STRIPE_WEBHOOK_SECRET: ${env:STRIPE_WEBHOOK_SECRET, ''}
       STRIPE_SERVICE_API_KEY: ${env:STRIPE_SERVICE_API_KEY, 'internal-stripe-dev'}
       STRIPE_MOCK: ${env:STRIPE_MOCK, 'false'}
 
@@ -246,7 +251,7 @@ functions:
     handler: src/functions/generateReceipt.handler
     events:
       - eventBridge:
-          eventBus: ${self:custom.eventBusName}
+          eventBus: !Ref PaymentsEventBus
           pattern:
             source:
               - sfr3.payments
@@ -271,7 +276,7 @@ functions:
     handler: src/functions/sendNotification.handler
     events:
       - eventBridge:
-          eventBus: ${self:custom.eventBusName}
+          eventBus: !Ref PaymentsEventBus
           pattern:
             source:
               - sfr3.payments
@@ -486,9 +491,8 @@ resources:
             - Id: GlacierAfterOneYear
               Status: Enabled
               Transitions:
-                - Days: 365
+                - TransitionInDays: 365
                   StorageClass: GLACIER
-              Filter: {}
 
     # Firehose
     EventsFirehoseRole:
@@ -643,6 +647,23 @@ resources:
             SerdeInfo:
               SerializationLibrary: org.openx.data.json.serde.JsonSerDe
 
+    # CloudWatch Dashboard (generic; add Lambda names after deploy for specific functions)
+    PaymentsDashboard:
+      Type: AWS::CloudWatch::Dashboard
+      Properties:
+        DashboardName: ${self:service}-${self:provider.stage}-payments
+        DashboardBody: !Sub |
+          {
+            "widgets": [
+              {
+                "type": "text",
+                "properties": {
+                  "markdown": "# SFR3 Payments\nStage: ${self:provider.stage}\n\nAdd Lambda metrics (Errors, Duration) for makePayment, stripeWebhookHandler, streamProcessor from CloudWatch > Metrics > Lambda."
+                }
+              }
+            ]
+          }
+
   Outputs:
     ApiEndpoint:
       Description: API Gateway endpoint
@@ -665,20 +686,3 @@ resources:
       Value: !Ref StaffUserPool
     GlueDatabaseName:
       Value: !Ref GlueDatabase
-
-    # CloudWatch Dashboard (generic; add Lambda names after deploy for specific functions)
-    PaymentsDashboard:
-      Type: AWS::CloudWatch::Dashboard
-      Properties:
-        DashboardName: ${self:service}-${self:provider.stage}-payments
-        DashboardBody: !Sub |
-          {
-            "widgets": [
-              {
-                "type": "text",
-                "properties": {
-                  "markdown": "# SFR3 Payments\nStage: ${self:provider.stage}\n\nAdd Lambda metrics (Errors, Duration) for makePayment, stripeWebhookHandler, streamProcessor from CloudWatch > Metrics > Lambda."
-                }
-              }
-            ]
-          }
