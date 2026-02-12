@@ -197,11 +197,18 @@ export async function ensureLedgerInitialized(residentId: string, config: Ledger
   if (v > 0) return;
   const client = getClient(config);
   const snapshot = createSnapshotRecord(residentId, 0, 0, []);
-  await client.send(
-    new PutCommand({
-      TableName: config.tableName,
-      Item: snapshot as unknown as Record<string, unknown>,
-      ConditionExpression: 'attribute_not_exists(SK)',
-    })
-  );
+  try {
+    await client.send(
+      new PutCommand({
+        TableName: config.tableName,
+        Item: snapshot as unknown as Record<string, unknown>,
+        ConditionExpression: 'attribute_not_exists(SK)',
+      })
+    );
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) {
+      return; // already initialized (e.g. by another caller)
+    }
+    throw err;
+  }
 }
